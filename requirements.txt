@@ -67,3 +67,4 @@ huggingface_hub
 diffusers
 accelerate
 transformers
+omegaconf
