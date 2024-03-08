@@ -38,6 +38,7 @@ MANIFEST
 output/
 data/
 Tracking-Anything-with-DEVA/
+dust3r/
 
 # PyInstaller
 #  Usually these files are written by a python script from a template

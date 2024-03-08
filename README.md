@@ -158,17 +158,16 @@ cd ../..
 ## Quick Start
 
 ```shell
-bash script/prepare_pseudo_label.sh truck 1
-python spin_nerf/imgs2poses.py --data_dir data/truck/
-
-python spin_nerf/ds_nerf/run_nerf.py --config configs/spin_nerf_config.txt --render_factor 1 --prepare --i_weight 1000000000 --i_video 1000000000 --i_feat 4000 --N_iters 4001 --expname truck --datadir data/truck --factor 2 --N_gt 0
-
 python run_gaussian.py -s data/truck -m output/truck --config_file configs/gaussian_dataset/train.json
 
 python extract_object.py -m output/truck_test_cos --config_file configs/gaussian_dataset/truck.json
+复制classifier.pth
 python render_obj.py -m output/truck_test_cos/object_104/ --config_file configs/gaussian_dataset/truck.json
 
 python render.py -m output/truck_test_cos/object_102/
+
+conda activate sugar
+
 ``````
 
 Start by optimizing a vanilla Gaussian Splatting model for 7k iterations by running the script `gaussian_splatting/train.py`, as shown below. Please refer to the original <a href="https://github.com/graphdeco-inria/gaussian-splatting">3D Gaussian Splatting repository</a> for more details. This optimization should be very fast, and last only a few minutes.

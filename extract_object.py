@@ -9,7 +9,7 @@
 import torch
 from gaussian_splatting.scene import Scene
 import os
-os.environ["CUDA_VISIBLE_DEVICES"] = "3"
+os.environ["CUDA_VISIBLE_DEVICES"] = "0"
 from gaussian_splatting.utils.general_utils import safe_state
 from argparse import ArgumentParser
 from gaussian_splatting.arguments import ModelParams, PipelineParams, OptimizationParams, get_combined_args
@@ -47,7 +47,7 @@ def extract(dataset : ModelParams, iteration : int,  opt : OptimizationParams, o
         mask3d = mask3d.float()[:,None,None]
         
     gaussians.extract_setup(opt, mask3d)
-    point_cloud_path = os.path.join(dataset.model_path, "object_{}/point_cloud/iteration_{}".format(int(obj_id),iteration))
+    point_cloud_path = os.path.join(dataset.model_path, "object_{}/point_cloud/iteration_{}".format(int(obj_id[0]),iteration))
     gaussians.save_ply(os.path.join(point_cloud_path, "point_cloud.ply"))
     
     print("Done")
