@@ -162,6 +162,8 @@ python run_gaussian.py -s data/truck -m output/truck --config_file configs/gauss
 
 python extract_object.py -m output/truck_test_cos --config_file configs/gaussian_dataset/truck.json
 复制classifier.pth
+复制cameras.json、cfg_args
+复制sparse
 python render_obj.py -m output/truck_test_cos/object_104/ --config_file configs/gaussian_dataset/truck.json
 
 python render.py -m output/truck_test_cos/object_102/
@@ -183,6 +185,7 @@ Then, run the script `train.py` in the root directory to optimize a SuGaR model.
 ```shell
 python train.py -s <path to COLMAP or NeRF Synthetic dataset> -c <path to the Gaussian Splatting checkpoint> -r <"density" or "sdf">
 python train.py -s ~/Code/GSS/output/truck_test_cos/object_104/train/ours_7000/ -c ~/Code/GSS/output/truck_test_cos/object_104/ -r density --gpu 2
+python train.py -s ~/Code/GSS/output/figurines/object_67/train/ours_7000/ -c ~/Code/GSS/output/figurines/object_67/ -r density --gpu 3
 
 ```
 

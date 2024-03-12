@@ -64,8 +64,8 @@ class GUI:
         self.train_steps = 1  # steps per rendering loop
         
         # load input data from cmdline
-        if self.opt.input is not None:
-            self.load_input(self.opt.input)
+        # if self.opt.input is not None:
+        #     self.load_input(self.opt.input)
         
         # override prompt from cmdline
         if self.opt.prompt is not None:
@@ -147,12 +147,12 @@ class GUI:
             print(f"[INFO] loaded zero123!")
 
         # input image
-        if self.input_img is not None:
-            self.input_img_torch = torch.from_numpy(self.input_img).permute(2, 0, 1).unsqueeze(0).to(self.device)
-            self.input_img_torch = F.interpolate(self.input_img_torch, (self.opt.ref_size, self.opt.ref_size), mode="bilinear", align_corners=False)
+        # if self.input_img is not None:
+        #     self.input_img_torch = torch.from_numpy(self.input_img).permute(2, 0, 1).unsqueeze(0).to(self.device)
+        #     self.input_img_torch = F.interpolate(self.input_img_torch, (self.opt.ref_size, self.opt.ref_size), mode="bilinear", align_corners=False)
 
-            self.input_mask_torch = torch.from_numpy(self.input_mask).permute(2, 0, 1).unsqueeze(0).to(self.device)
-            self.input_mask_torch = F.interpolate(self.input_mask_torch, (self.opt.ref_size, self.opt.ref_size), mode="bilinear", align_corners=False)
+        #     self.input_mask_torch = torch.from_numpy(self.input_mask).permute(2, 0, 1).unsqueeze(0).to(self.device)
+        #     self.input_mask_torch = F.interpolate(self.input_mask_torch, (self.opt.ref_size, self.opt.ref_size), mode="bilinear", align_corners=False)
 
         # prepare embeddings
         with torch.no_grad():
@@ -360,30 +360,30 @@ class GUI:
         #     )  # buffer must be contiguous, else seg fault!
 
     
-    def load_input(self, file):
-        # load image
-        print(f'[INFO] load image from {file}...')
-        img = cv2.imread(file, cv2.IMREAD_UNCHANGED)
-        if img.shape[-1] == 3:
-            if self.bg_remover is None:
-                self.bg_remover = rembg.new_session()
-            img = rembg.remove(img, session=self.bg_remover)
+    # def load_input(self, file):
+    #     # load image
+    #     print(f'[INFO] load image from {file}...')
+    #     img = cv2.imread(file, cv2.IMREAD_UNCHANGED)
+    #     if img.shape[-1] == 3:
+    #         if self.bg_remover is None:
+    #             self.bg_remover = rembg.new_session()
+    #         img = rembg.remove(img, session=self.bg_remover)
 
-        img = cv2.resize(img, (self.W, self.H), interpolation=cv2.INTER_AREA)
-        img = img.astype(np.float32) / 255.0
+    #     img = cv2.resize(img, (self.W, self.H), interpolation=cv2.INTER_AREA)
+    #     img = img.astype(np.float32) / 255.0
 
-        self.input_mask = img[..., 3:]
-        # white bg
-        self.input_img = img[..., :3] * self.input_mask + (1 - self.input_mask)
-        # bgr to rgb
-        self.input_img = self.input_img[..., ::-1].copy()
+    #     self.input_mask = img[..., 3:]
+    #     # white bg
+    #     self.input_img = img[..., :3] * self.input_mask + (1 - self.input_mask)
+    #     # bgr to rgb
+    #     self.input_img = self.input_img[..., ::-1].copy()
 
-        # load prompt
-        file_prompt = file.replace("_rgba.png", "_caption.txt")
-        if os.path.exists(file_prompt):
-            print(f'[INFO] load prompt from {file_prompt}...')
-            with open(file_prompt, "r") as f:
-                self.prompt = f.read().strip()
+    #     # load prompt
+    #     file_prompt = file.replace("_rgba.png", "_caption.txt")
+    #     if os.path.exists(file_prompt):
+    #         print(f'[INFO] load prompt from {file_prompt}...')
+    #         with open(file_prompt, "r") as f:
+    #             self.prompt = f.read().strip()
 
     
     # no gui mode
