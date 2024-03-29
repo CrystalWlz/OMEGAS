@@ -32,9 +32,6 @@ def extract(dataset : ModelParams, iteration : int,  opt : OptimizationParams, o
         classifier.cuda()
         classifier.load_state_dict(torch.load(os.path.join(dataset.model_path,"point_cloud","iteration_"+str(iteration),"classifier.pth")))
 
-
-        # 2. inpaint selected object
-        # gaussians = finetune_inpaint(opt, dataset.model_path, scene.loaded_iter, scene.getTrainCameras(), gaussians, pipeline, background, classifier, select_obj_id, scene.cameras_extent, removal_thresh, finetune_iteration)
         obj_id = torch.tensor(obj_id).cuda()
     
         logits3d = classifier(gaussians._objects.permute(2,0,1))

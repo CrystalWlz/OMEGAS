@@ -453,9 +453,11 @@ class GaussianModel:
             rots[:, idx] = np.asarray(plydata.elements[0][attr_name])
         
         objects = np.zeros((xyz.shape[0], self.num_objects, 1))
-        
-        for idx in range(self.num_objects):
-            objects[:,idx,0] = np.asarray(plydata.elements[0]["obj_"+str(idx)])
+        try:
+            for idx in range(self.num_objects):
+                objects[:,idx,0] = np.asarray(plydata.elements[0]["obj_"+str(idx)])
+        except:
+            objects = np.zeros((xyz.shape[0], self.num_objects, 1))
 
         self._xyz = nn.Parameter(torch.tensor(xyz, dtype=torch.float, device="cuda").requires_grad_(True))
         self._features_dc = nn.Parameter(torch.tensor(features_dc, dtype=torch.float, device="cuda").transpose(1, 2).contiguous().requires_grad_(True))

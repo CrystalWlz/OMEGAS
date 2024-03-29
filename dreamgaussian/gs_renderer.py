@@ -13,11 +13,11 @@ from diff_gaussian_rasterization_dm import (
 )
 from simple_knn._C import distCUDA2
 
-from sh_utils import eval_sh, SH2RGB, RGB2SH
-from mesh import Mesh
-from mesh_utils import decimate_mesh, clean_mesh
+from dreamgaussian.sh_utils import eval_sh, SH2RGB, RGB2SH
+# from mesh import Mesh
+# from mesh_utils import decimate_mesh, clean_mesh
 
-import kiui
+# import kiui
 
 def inverse_sigmoid(x):
     return torch.log(x/(1-x))
@@ -215,111 +215,111 @@ class GaussianModel:
     def get_opacity(self):
         return self.opacity_activation(self._opacity)
 
-    @torch.no_grad()
-    def extract_fields(self, resolution=128, num_blocks=16, relax_ratio=1.5):
-        # resolution: resolution of field
+    # @torch.no_grad()
+    # def extract_fields(self, resolution=128, num_blocks=16, relax_ratio=1.5):
+    #     # resolution: resolution of field
         
-        block_size = 2 / num_blocks
+    #     block_size = 2 / num_blocks
 
-        assert resolution % block_size == 0
-        split_size = resolution // num_blocks
+    #     assert resolution % block_size == 0
+    #     split_size = resolution // num_blocks
 
-        opacities = self.get_opacity
+    #     opacities = self.get_opacity
 
-        # pre-filter low opacity gaussians to save computation
-        mask = (opacities > 0.005).squeeze(1)
+    #     # pre-filter low opacity gaussians to save computation
+    #     mask = (opacities > 0.005).squeeze(1)
 
-        opacities = opacities[mask]
-        xyzs = self.get_xyz[mask]
-        stds = self.get_scaling[mask]
+    #     opacities = opacities[mask]
+    #     xyzs = self.get_xyz[mask]
+    #     stds = self.get_scaling[mask]
         
-        # normalize to ~ [-1, 1]
-        mn, mx = xyzs.amin(0), xyzs.amax(0)
-        self.center = (mn + mx) / 2
-        self.scale = 1.8 / (mx - mn).amax().item()
+    #     # normalize to ~ [-1, 1]
+    #     mn, mx = xyzs.amin(0), xyzs.amax(0)
+    #     self.center = (mn + mx) / 2
+    #     self.scale = 1.8 / (mx - mn).amax().item()
 
-        xyzs = (xyzs - self.center) * self.scale
-        stds = stds * self.scale
+    #     xyzs = (xyzs - self.center) * self.scale
+    #     stds = stds * self.scale
 
-        covs = self.covariance_activation(stds, 1, self._rotation[mask])
+    #     covs = self.covariance_activation(stds, 1, self._rotation[mask])
 
-        # tile
-        device = opacities.device
-        occ = torch.zeros([resolution] * 3, dtype=torch.float32, device=device)
+    #     # tile
+    #     device = opacities.device
+    #     occ = torch.zeros([resolution] * 3, dtype=torch.float32, device=device)
 
-        X = torch.linspace(-1, 1, resolution).split(split_size)
-        Y = torch.linspace(-1, 1, resolution).split(split_size)
-        Z = torch.linspace(-1, 1, resolution).split(split_size)
+    #     X = torch.linspace(-1, 1, resolution).split(split_size)
+    #     Y = torch.linspace(-1, 1, resolution).split(split_size)
+    #     Z = torch.linspace(-1, 1, resolution).split(split_size)
 
 
-        # loop blocks (assume max size of gaussian is small than relax_ratio * block_size !!!)
-        for xi, xs in enumerate(X):
-            for yi, ys in enumerate(Y):
-                for zi, zs in enumerate(Z):
-                    xx, yy, zz = torch.meshgrid(xs, ys, zs)
-                    # sample points [M, 3]
-                    pts = torch.cat([xx.reshape(-1, 1), yy.reshape(-1, 1), zz.reshape(-1, 1)], dim=-1).to(device)
-                    # in-tile gaussians mask
-                    vmin, vmax = pts.amin(0), pts.amax(0)
-                    vmin -= block_size * relax_ratio
-                    vmax += block_size * relax_ratio
-                    mask = (xyzs < vmax).all(-1) & (xyzs > vmin).all(-1)
-                    # if hit no gaussian, continue to next block
-                    if not mask.any():
-                        continue
-                    mask_xyzs = xyzs[mask] # [L, 3]
-                    mask_covs = covs[mask] # [L, 6]
-                    mask_opas = opacities[mask].view(1, -1) # [L, 1] --> [1, L]
+    #     # loop blocks (assume max size of gaussian is small than relax_ratio * block_size !!!)
+    #     for xi, xs in enumerate(X):
+    #         for yi, ys in enumerate(Y):
+    #             for zi, zs in enumerate(Z):
+    #                 xx, yy, zz = torch.meshgrid(xs, ys, zs)
+    #                 # sample points [M, 3]
+    #                 pts = torch.cat([xx.reshape(-1, 1), yy.reshape(-1, 1), zz.reshape(-1, 1)], dim=-1).to(device)
+    #                 # in-tile gaussians mask
+    #                 vmin, vmax = pts.amin(0), pts.amax(0)
+    #                 vmin -= block_size * relax_ratio
+    #                 vmax += block_size * relax_ratio
+    #                 mask = (xyzs < vmax).all(-1) & (xyzs > vmin).all(-1)
+    #                 # if hit no gaussian, continue to next block
+    #                 if not mask.any():
+    #                     continue
+    #                 mask_xyzs = xyzs[mask] # [L, 3]
+    #                 mask_covs = covs[mask] # [L, 6]
+    #                 mask_opas = opacities[mask].view(1, -1) # [L, 1] --> [1, L]
 
-                    # query per point-gaussian pair.
-                    g_pts = pts.unsqueeze(1).repeat(1, mask_covs.shape[0], 1) - mask_xyzs.unsqueeze(0) # [M, L, 3]
-                    g_covs = mask_covs.unsqueeze(0).repeat(pts.shape[0], 1, 1) # [M, L, 6]
+    #                 # query per point-gaussian pair.
+    #                 g_pts = pts.unsqueeze(1).repeat(1, mask_covs.shape[0], 1) - mask_xyzs.unsqueeze(0) # [M, L, 3]
+    #                 g_covs = mask_covs.unsqueeze(0).repeat(pts.shape[0], 1, 1) # [M, L, 6]
 
-                    # batch on gaussian to avoid OOM
-                    batch_g = 1024
-                    val = 0
-                    for start in range(0, g_covs.shape[1], batch_g):
-                        end = min(start + batch_g, g_covs.shape[1])
-                        w = gaussian_3d_coeff(g_pts[:, start:end].reshape(-1, 3), g_covs[:, start:end].reshape(-1, 6)).reshape(pts.shape[0], -1) # [M, l]
-                        val += (mask_opas[:, start:end] * w).sum(-1)
+    #                 # batch on gaussian to avoid OOM
+    #                 batch_g = 1024
+    #                 val = 0
+    #                 for start in range(0, g_covs.shape[1], batch_g):
+    #                     end = min(start + batch_g, g_covs.shape[1])
+    #                     w = gaussian_3d_coeff(g_pts[:, start:end].reshape(-1, 3), g_covs[:, start:end].reshape(-1, 6)).reshape(pts.shape[0], -1) # [M, l]
+    #                     val += (mask_opas[:, start:end] * w).sum(-1)
                     
-                    # kiui.lo(val, mask_opas, w)
+    #                 # kiui.lo(val, mask_opas, w)
                 
-                    occ[xi * split_size: xi * split_size + len(xs), 
-                        yi * split_size: yi * split_size + len(ys), 
-                        zi * split_size: zi * split_size + len(zs)] = val.reshape(len(xs), len(ys), len(zs)) 
+    #                 occ[xi * split_size: xi * split_size + len(xs), 
+    #                     yi * split_size: yi * split_size + len(ys), 
+    #                     zi * split_size: zi * split_size + len(zs)] = val.reshape(len(xs), len(ys), len(zs)) 
         
-        kiui.lo(occ, verbose=1)
+    #     kiui.lo(occ, verbose=1)
 
-        return occ
+    #     return occ
     
-    def extract_mesh(self, path, density_thresh=1, resolution=128, decimate_target=1e5):
+    # def extract_mesh(self, path, density_thresh=1, resolution=128, decimate_target=1e5):
 
-        os.makedirs(os.path.dirname(path), exist_ok=True)
+    #     os.makedirs(os.path.dirname(path), exist_ok=True)
 
-        occ = self.extract_fields(resolution).detach().cpu().numpy()
+    #     occ = self.extract_fields(resolution).detach().cpu().numpy()
 
-        import mcubes
-        vertices, triangles = mcubes.marching_cubes(occ, density_thresh)
-        vertices = vertices / (resolution - 1.0) * 2 - 1
+    #     import mcubes
+    #     vertices, triangles = mcubes.marching_cubes(occ, density_thresh)
+    #     vertices = vertices / (resolution - 1.0) * 2 - 1
 
-        # transform back to the original space
-        vertices = vertices / self.scale + self.center.detach().cpu().numpy()
+    #     # transform back to the original space
+    #     vertices = vertices / self.scale + self.center.detach().cpu().numpy()
 
-        vertices, triangles = clean_mesh(vertices, triangles, remesh=True, remesh_size=0.015)
-        if decimate_target > 0 and triangles.shape[0] > decimate_target:
-            vertices, triangles = decimate_mesh(vertices, triangles, decimate_target)
+    #     vertices, triangles = clean_mesh(vertices, triangles, remesh=True, remesh_size=0.015)
+    #     if decimate_target > 0 and triangles.shape[0] > decimate_target:
+    #         vertices, triangles = decimate_mesh(vertices, triangles, decimate_target)
 
-        v = torch.from_numpy(vertices.astype(np.float32)).contiguous().cuda()
-        f = torch.from_numpy(triangles.astype(np.int32)).contiguous().cuda()
+    #     v = torch.from_numpy(vertices.astype(np.float32)).contiguous().cuda()
+    #     f = torch.from_numpy(triangles.astype(np.int32)).contiguous().cuda()
 
-        print(
-            f"[INFO] marching cubes result: {v.shape} ({v.min().item()}-{v.max().item()}), {f.shape}"
-        )
+    #     print(
+    #         f"[INFO] marching cubes result: {v.shape} ({v.min().item()}-{v.max().item()}), {f.shape}"
+    #     )
 
-        mesh = Mesh(v=v, f=f, device='cuda')
+    #     mesh = Mesh(v=v, f=f, device='cuda')
 
-        return mesh
+    #     return mesh
     
     def get_covariance(self, scaling_modifier = 1):
         return self.covariance_activation(self.get_scaling, scaling_modifier, self._rotation)
@@ -458,6 +458,8 @@ class GaussianModel:
         self._opacity = nn.Parameter(torch.tensor(opacities, dtype=torch.float, device="cuda").requires_grad_(True))
         self._scaling = nn.Parameter(torch.tensor(scales, dtype=torch.float, device="cuda").requires_grad_(True))
         self._rotation = nn.Parameter(torch.tensor(rots, dtype=torch.float, device="cuda").requires_grad_(True))
+        self.max_radii2D = torch.zeros((self.get_xyz.shape[0]), device="cuda")
+        
 
         self.active_sh_degree = self.max_sh_degree
 
