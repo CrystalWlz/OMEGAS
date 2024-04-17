@@ -1,6 +1,6 @@
 import os
 os.environ["CUDA_VISIBLE_DEVICES"] = "3"
-os.environ["CUDA_LAUNCH_BLOCKING"] = "1"
+# os.environ["CUDA_LAUNCH_BLOCKING"] = "1"
 import sys
 import numpy as np
 import json
@@ -102,7 +102,7 @@ def train(dataset, opt, pipe, testing_iterations, saving_iterations, checkpoint_
     cls_criterion = torch.nn.CrossEntropyLoss(reduction='none')
     cls_optimizer = torch.optim.Adam(classifier.parameters(), lr=5e-4)
     classifier.cuda()
-                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                               
+                                                                                            
     if checkpoint:
         (model_params, first_iter) = torch.load(checkpoint)
         gaussians.restore(model_params, opt)
@@ -254,8 +254,8 @@ if __name__ == '__main__':
     parser.add_argument('--port', type=int, default=6009)
     parser.add_argument('--debug_from', type=int, default=-1)
     parser.add_argument('--detect_anomaly', action='store_true', default=False)
-    parser.add_argument("--test_iterations", nargs="+", type=int, default=[1000,7_000, 30_000])
-    parser.add_argument("--save_iterations", nargs="+", type=int, default=[1000,7_000, 30_000])
+    parser.add_argument("--test_iterations", nargs="+", type=int, default=[7_000, 30_000])
+    parser.add_argument("--save_iterations", nargs="+", type=int, default=[7_000, 30_000])
     parser.add_argument("--quiet", action="store_true")
     parser.add_argument("--checkpoint_iterations", nargs="+", type=int, default=[])
     parser.add_argument("--start_checkpoint", type=str, default = None)
@@ -281,6 +281,7 @@ if __name__ == '__main__':
     args.reg3d_lambda_val = config.get("reg3d_lambda_val", 2)
     args.reg3d_max_points = config.get("reg3d_max_points", 300000)
     args.reg3d_sample_size = config.get("reg3d_sample_size", 1000)
+
     
     print("Optimizing " + args.model_path)
 

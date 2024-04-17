@@ -158,16 +158,16 @@ cd ../..
 ## Quick Start
 
 ```shell
-python run_gaussian.py -s data/truck -m output/truck --config_file configs/gaussian_dataset/train.json
+python run_gaussian.py -s data/truck -m output/truck
 
 python extract_object.py -m output/truck_test_cos --config_file configs/gaussian_dataset/truck.json
 复制classifier.pth
 复制cameras.json、cfg_args
 复制sparse
 
-python dream_gaussian_main.py --config configs/dream_image.yaml load=output/truck/object_104/ prompt="truck" input=output/truck/object_104/images/000057.jpg
-python dream_gaussian_main.py --config configs/dream_image.yaml load=output/teatime/object_97/ prompt="sheep" inpu
-t=output/teatime/object_97/images/frame_00129.jpg
+python dream_gaussian_main.py --config configs/dream_image.yaml load=output/truck/object_104/  input=output/truck/object_104/images/000057.jpg
+python dream_gaussian_main.py --config configs/dream_image.yaml load=output/teatime/object_97/ input=output/teatime/object_97/images/frame_00129.jpg
+python dream_gaussian_main.py --config configs/dream_truck.yaml load=output/truck/object_104/ prompt="a photo of a truck"
 
 python render_obj.py -m output/truck_test_cos/object_104/ --config_file configs/gaussian_dataset/truck.json
 
@@ -190,7 +190,7 @@ Then, run the script `train.py` in the root directory to optimize a SuGaR model.
 ```shell
 python train.py -s <path to COLMAP or NeRF Synthetic dataset> -c <path to the Gaussian Splatting checkpoint> -r <"density" or "sdf">
 python train.py -s ~/Code/OMEGS/output/truck_test_cos/object_104/train/ours_7000/ -c ~/Code/OMEGS/output/truck_test_cos/object_104/ -r density --gpu 2
-python train.py -s ~/Code/OMEGS/output/figurines/object_67/train/ours_7000/ -c ~/Code/OMEGS/output/figurines/object_67/ -r density --gpu 3
+python train.py -s ~/Code/OMEGS/output/figurines/object_67/ -c ~/Code/OMEGS/output/figurines/object_67/ -r density --gpu 3
 
 ```
 
@@ -359,7 +359,11 @@ To evaluate the quality of the reconstructions, we provide a script `metrics.py`
 Finally, run the script as follows:
 
 ```shell
-python metrics.py --scene_config <Path to the .json file> -r <"sdf" or "density"> 
+python run_gaussian.py -s data/teatime -m result/lerf_mask/teatime --eval
+
+python render_lerf_mask.py -m result/lerf_mask/teatime --skip_train
+
+python scrpt/eval_lerf_mask.py teatime
 ```
 
 Results are saved in a `.json` file in the `output/metrics/` directory. 

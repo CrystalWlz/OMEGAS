@@ -1,18 +1,20 @@
 import os
-os.environ["CUDA_VISIBLE_DEVICES"] = "3"
+from os import makedirs
+os.environ["CUDA_VISIBLE_DEVICES"] = "0"
 import cv2
 import time
 import tqdm
 import numpy as np
 # import dearpygui.dearpygui as dpg
 from omegaconf import OmegaConf
+import torchvision
 from argparse import ArgumentParser, Namespace
 import torch
 import torch.nn.functional as F
-
+import json
 import rembg
 
-from dreamgaussian.cam_utils import orbit_camera, OrbitCamera
+from dreamgaussian.cam_utils import orbit_camera, OrbitCamera, save_camera
 from dreamgaussian.gs_renderer import Renderer, MiniCam
 
 # from dreamgaussian.grid_put import mipmap_linear_grid_put_2d
@@ -22,9 +24,9 @@ class GUI:
     def __init__(self, opt):
         self.opt = opt  # shared with the trainer's opt to support in-place modification of rendering parameters.
         self.gui = opt.gui # enable gui
-        self.W = opt.W
-        self.H = opt.H
-        self.cam = OrbitCamera(opt.W, opt.H, r=opt.radius, fovy=opt.fovy)
+        self.W = opt._W
+        self.H = opt._H
+        self.cam = OrbitCamera(opt.W, opt.H, r=opt.radius, fovy=opt._fovy)
 
         self.mode = "image"
         self.seed = "random"
@@ -115,8 +117,27 @@ class GUI:
         self.optimizer = self.renderer.gaussians.optimizer
 
         
+        # # default camera
+        # pose = orbit_camera(self.opt.elevation, 0, self.opt.radius)
+        # self.fixed_cam = MiniCam(
+        #     pose,
+        #     self.opt.ref_size,
+        #     self.opt.ref_size,
+        #     self.cam.fovy,
+        #     self.cam.fovx,
+        #     self.cam.near,
+        #     self.cam.far,
+        # )
+        self.target = torch.mean(self.renderer.gaussians._xyz, dim=0).detach().cpu().numpy()
+        
+        variance = torch.var(self.renderer.gaussians._xyz, unbiased=True).detach().cpu().numpy()
+        self.radius_c = np.sqrt(variance)
+        
+        print("target:", self.target)
+        print("radius:", self.radius_c)
+        self.radius = float(self.radius_c)+self.opt.radius
         # default camera
-        pose = orbit_camera(self.opt.elevation, 0, self.opt.radius)
+        pose = orbit_camera(self.opt.elevation, 0, self.radius_c)
         self.fixed_cam = MiniCam(
             pose,
             self.opt.ref_size,
@@ -126,7 +147,7 @@ class GUI:
             self.cam.near,
             self.cam.far,
         )
-
+        
         self.enable_sd = self.opt.lambda_sd > 0 and self.prompt != ""
         self.enable_zero123 = self.opt.lambda_zero123 > 0 and self.input_img is not None
         # self.enable_zero123 = self.opt.lambda_zero123 > 0 and self.prompt != ""
@@ -170,13 +191,16 @@ class GUI:
 
             if self.enable_zero123:
                 self.guidance_zero123.get_img_embeds(self.input_img_torch)
-
+        self.render_path = os.path.join(self.opt.load, "refined_sdssde", "random")
+        self.sd_path = os.path.join(self.opt.load, "refined_sdssde", "sd")
+        makedirs(self.render_path, exist_ok=True)
+        makedirs(self.sd_path, exist_ok=True)
+        
     def train_step(self):
         starter = torch.cuda.Event(enable_timing=True)
         ender = torch.cuda.Event(enable_timing=True)
         starter.record()
-
-        for _ in range(self.train_steps):
+        for iter in range(self.train_steps):
 
             self.step += 1
             step_ratio = min(1, self.step / self.opt.iters)
@@ -202,29 +226,32 @@ class GUI:
             ### novel view (manual batch)
             # render_resolution = 128 if step_ratio < 0.3 else (256 if step_ratio < 0.6 else 512)
             render_resolution = 800
+            # render_resolution = 256 if step_ratio < 0.3 else (512 if step_ratio < 0.6 else 800)
             images = []
             poses = []
             vers, hors, radii = [], [], []
             # avoid too large elevation (> 80 or < -80), and make sure it always cover [-30, 30]
             # min_ver = max(min(-30, -30 - self.opt.elevation), -80 - self.opt.elevation)
             # max_ver = min(max(30, 30 - self.opt.elevation), 80 - self.opt.elevation)
-            min_ver = max(min(self.opt.min_ver, self.opt.min_ver - self.opt.elevation), -80 - self.opt.elevation)
-            max_ver = min(max(self.opt.max_ver, self.opt.max_ver - self.opt.elevation), 80 - self.opt.elevation)
-
+            min_ver = self.opt.min_ver
+            max_ver = self.opt.max_ver
+            radius = self.radius
             for _ in range(self.opt.batch_size):
 
                 # render random view
                 ver = np.random.randint(min_ver, max_ver)
                 hor = np.random.randint(-180, 180)
-                radius = 0
+                
 
                 vers.append(ver)
                 hors.append(hor)
                 radii.append(radius)
 
-                pose = orbit_camera(self.opt.elevation + ver, hor, self.opt.radius + radius)
+                pose = orbit_camera(self.opt.elevation + ver, hor, radius, target= self.target)
                 poses.append(pose)
 
+                
+                
                 cur_cam = MiniCam(pose, render_resolution, render_resolution, self.cam.fovy, self.cam.fovx, self.cam.near, self.cam.far)
 
                 bg_color = torch.tensor([1, 1, 1] if np.random.rand() > self.opt.invert_bg_prob else [0, 0, 0], dtype=torch.float32, device="cuda")
@@ -236,7 +263,7 @@ class GUI:
                 # enable mvdream training
                 if self.opt.mvdream or self.opt.imagedream:
                     for view_i in range(1, 4):
-                        pose_i = orbit_camera(self.opt.elevation + ver, hor + 90 * view_i, self.opt.radius + radius)
+                        pose_i = orbit_camera(self.opt.elevation + ver, hor + 90 * view_i, radius)
                         poses.append(pose_i)
 
                         cur_cam_i = MiniCam(pose_i, render_resolution, render_resolution, self.cam.fovy, self.cam.fovx, self.cam.near, self.cam.far)
@@ -248,6 +275,8 @@ class GUI:
                         images.append(image)
 
             images = torch.cat(images, dim=0)
+            torchvision.utils.save_image(images, os.path.join(self.render_path, str(self.step) + ".jpg"))
+            
             poses = torch.from_numpy(np.stack(poses, axis=0)).to(self.device)
 
             # import kiui
@@ -257,22 +286,27 @@ class GUI:
             # guidance loss
             strength = step_ratio * 0.15 + 0.8
             if self.enable_sd:
-                if self.opt.mvdream or self.opt.imagedream:
-                    # loss = loss + self.opt.lambda_sd * self.guidance_sd.train_step(images, poses, step_ratio)
-                    refined_images = self.guidance_sd.refine(images, poses, strength=strength).float()
-                    refined_images = F.interpolate(refined_images, (render_resolution, render_resolution), mode="bilinear", align_corners=False)
-                    loss = loss + self.opt.lambda_sd * F.mse_loss(images, refined_images)
+                if self.step < self.opt.sdsiter:
+                    loss = loss + self.opt.lambda_sd * self.guidance_sd.train_step(images,  step_ratio)
+                    # refined_images = self.guidance_sd.refine(images, poses, strength=strength).float()
+                    # refined_images = F.interpolate(refined_images, (render_resolution, render_resolution), mode="bilinear", align_corners=False)
+                    # loss = loss + self.opt.lambda_sd * F.mse_loss(images, refined_images)
                 else:
                     # loss = loss + self.opt.lambda_sd * self.guidance_sd.train_step(images, step_ratio)
                     refined_images = self.guidance_sd.refine(images, strength=strength).float()
                     refined_images = F.interpolate(refined_images, (render_resolution, render_resolution), mode="bilinear", align_corners=False)
+                    torchvision.utils.save_image(refined_images, os.path.join(self.sd_path, str(self.step) + ".jpg"))
                     loss = loss + self.opt.lambda_sd * F.mse_loss(images, refined_images)
+                    
 
             if self.enable_zero123:
-                loss = loss + self.opt.lambda_zero123 * self.guidance_zero123.train_step(images, vers, hors, radii, step_ratio)
-                # refined_images = self.guidance_zero123.refine(images, vers, hors, radii, strength=strength, default_elevation=self.opt.elevation).float()
-                # refined_images = F.interpolate(refined_images, (render_resolution, render_resolution), mode="bilinear", align_corners=False)
-                # loss = loss + self.opt.lambda_zero123 * F.mse_loss(images, refined_images)
+                # loss = loss + self.opt.lambda_zero123 * self.guidance_zero123.train_step(images, vers, hors, radii, step_ratio)
+                # loss = loss + self.opt.lambda_zero123 * self.guidance_zero123.train_step(images, vers, hors, radii, step_ratio)
+                refined_images = self.guidance_zero123.refine(images, vers, hors, radii, strength=strength, default_elevation=self.opt.elevation).float()
+                refined_images = F.interpolate(refined_images, (render_resolution, render_resolution), mode="bilinear", align_corners=False)
+                loss = loss + self.opt.lambda_zero123 * F.mse_loss(images, refined_images)
+                
+                torchvision.utils.save_image(refined_images, os.path.join(self.sd_path, str(self.step) + ".jpg"))
                 # loss = loss + self.opt.lambda_zero123 * self.lpips_loss(images, refined_images)
             
             # optimize step
@@ -287,7 +321,7 @@ class GUI:
                 self.renderer.gaussians.add_densification_stats(viewspace_point_tensor, visibility_filter)
 
                 if self.step % self.opt.densification_interval == 0:
-                    self.renderer.gaussians.densify_and_prune(self.opt.densify_grad_threshold, min_opacity=0.01, extent=0.5, max_screen_size=1)
+                    self.renderer.gaussians.densify_and_prune(self.opt.densify_grad_threshold, min_opacity=0.05, extent=radius, max_screen_size=10)
                 
                 if self.step % self.opt.opacity_reset_interval == 0:
                     self.renderer.gaussians.reset_opacity()
@@ -311,6 +345,65 @@ class GUI:
         # train_steps = min(16, max(4, int(16 * 500 / full_t)))
         # if train_steps > self.train_steps * 1.2 or train_steps < self.train_steps * 0.8:
         #     self.train_steps = train_steps
+
+    def random_render(self):
+        render_W = self.opt.W
+        render_H = self.opt.H
+        random_render_path = os.path.join(self.opt.load, "images")
+        makedirs(random_render_path, exist_ok=True)
+        poses = []
+        vers, hors, radii = [], [], []
+        
+        radius = self.radius
+        random_n = self.opt.random_n
+        
+        radii.append(radius)
+        min_ver = self.opt.min_ver
+        max_ver = self.opt.max_ver
+        print("random render:",random_n)
+        for cam_id in range(random_n):
+            ver = np.random.randint(min_ver, max_ver)
+            hor = np.random.randint(-180, 180)
+            vers.append(ver)
+            hors.append(hor)
+            pose = orbit_camera(ver, hor, radius, target= self.target, opengl=False)
+            poses.append(pose)
+            
+            cur_cam = MiniCam(pose, render_W, render_H, self.opt.fovy, self.opt.fovx, self.cam.near, self.cam.far)
+            bg_color = torch.tensor([0, 0, 0], dtype=torch.float32, device="cuda")
+            out = self.renderer.render(cur_cam, bg_color=bg_color)
+
+            image = out["image"].unsqueeze(0) # [1, 3, H, W] in [0, 1]
+            torchvision.utils.save_image(image, os.path.join(random_render_path, "random_"+str(cam_id) + ".jpg"))
+            
+        with open(os.path.join(self.opt.load, "cameras.json"), "r") as f:
+            cameras_data = json.load(f)
+            if "ramdom" in cameras_data[-1]["img_name"]:
+                new_data = cameras_data[:-random_n]
+            else:
+                new_data = cameras_data
+            l = len(new_data)
+
+            
+            for cam_id in range(random_n):
+                po, ro = save_camera(vers[cam_id], hors[cam_id], radius = radius, target= self.target, opengl=False)
+                cam = {"id": cam_id +l,
+                    "img_name": "random_"+str(cam_id),
+                    "width": cameras_data[0]["width"],
+                    "height": new_data[0]["height"],
+                    "position": po.tolist(),
+                    "rotation": ro.tolist(),
+                    "fy": cameras_data[0]["fy"],
+                    "fx": cameras_data[0]["fx"]
+                }
+                new_data.append(cam)
+
+            # Save the updated data back to cameras.json
+        with open(os.path.join(self.opt.load, "refined_sdssde", "cameras.json"), "w") as file:
+            json.dump(new_data, file)
+
+        print("New data added to cameras.json successfully.")
+            
 
     @torch.no_grad()
     def test_step(self):
@@ -416,8 +509,11 @@ class GUI:
                 self.train_step()
             # do a last prune
             # self.renderer.gaussians.prune(min_opacity=0.01, extent=1, max_screen_size=1)
-            path = os.path.join(self.opt.load,"refined","point_cloud","iteration_7000", 'point_cloud.ply')
+            path = os.path.join(self.opt.load,"refined_sdssde","point_cloud","iteration_7000", 'point_cloud.ply')
             self.renderer.gaussians.save_ply(path)
+        
+        self.random_render()
+        
         # save
         # self.save_model(mode='model')
         # self.save_model(mode='geo+tex')
@@ -426,7 +522,7 @@ class GUI:
 if __name__ == "__main__":
 
     parser = ArgumentParser(description="Training script parameters")
-    parser.add_argument("--config", required=True, help="path to the yaml config file")
+    parser.add_argument("--config", required=True, default="")
     args, extras = parser.parse_known_args()
 
     # override default config from cli

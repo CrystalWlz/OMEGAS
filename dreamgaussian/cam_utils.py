@@ -42,7 +42,7 @@ def look_at(campos, target, opengl=True):
 
 
 # elevation & azimuth to pose (cam2world) matrix
-def orbit_camera(elevation, azimuth, radius=1, is_degree=True, target=None, opengl=True):
+def orbit_camera(elevation, azimuth, radius=1, is_degree=True, target=None, opengl=False):
     # radius: scalar
     # elevation: scalar, in (-90, 90), from +y to -y is (-90, 90)
     # azimuth: scalar, in (-180, 180), from +z to +x is (0, 90)
@@ -61,6 +61,23 @@ def orbit_camera(elevation, azimuth, radius=1, is_degree=True, target=None, open
     T[:3, 3] = campos
     return T
 
+def save_camera(elevation, azimuth, radius=1, is_degree=True, target=None, opengl=True):
+    # radius: scalar
+    # elevation: scalar, in (-90, 90), from +y to -y is (-90, 90)
+    # azimuth: scalar, in (-180, 180), from +z to +x is (0, 90)
+    # return: [4, 4], camera pose matrix
+    if is_degree:
+        elevation = np.deg2rad(elevation)
+        azimuth = np.deg2rad(azimuth)
+    x = radius * np.cos(elevation) * np.sin(azimuth)
+    y = - radius * np.sin(elevation)
+    z = radius * np.cos(elevation) * np.cos(azimuth)
+    if target is None:
+        target = np.zeros([3], dtype=np.float32)
+    position = np.array([x,y,z])
+    campos = np.array([x, y, z]) + target  # [3]
+    rotation = look_at(campos, target, opengl)
+    return position, rotation
 
 class OrbitCamera:
     def __init__(self, W, H, r=2, fovy=60, near=0.01, far=100):

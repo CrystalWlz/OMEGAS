@@ -1,5 +1,5 @@
 {
     "num_classes": 256,
     "removal_thresh": 0.8,
-    "select_obj_id" : [67]
+    "select_obj_id" : [70]
 }

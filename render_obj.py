@@ -9,7 +9,7 @@
 import torch
 from gaussian_splatting.scene import Scene
 import os
-os.environ["CUDA_VISIBLE_DEVICES"] = "0"
+os.environ["CUDA_VISIBLE_DEVICES"] = "1"
 # os.environ["CUDA_LAUNCH_BLOCKING"] = "1"
 from tqdm import tqdm
 from os import makedirs

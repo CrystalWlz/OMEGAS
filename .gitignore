@@ -147,4 +147,5 @@ gaussian_splatting/submodules/diff-gaussian-rasterization-od/third_party/
 spin_nerf/
 submodules/
 dreamgaussian/diff-gaussian-rasterization-dm
+result/
 

@@ -658,8 +658,8 @@ class MiniCam:
         w2c = np.linalg.inv(c2w)
 
         # rectify...
-        w2c[1:3, :3] *= -1
-        w2c[:3, 3] *= -1
+        # w2c[1:3, :3] *= -1
+        # w2c[:3, 3] *= -1
 
         self.world_view_transform = torch.tensor(w2c).transpose(0, 1).cuda()
         self.projection_matrix = (
@@ -670,7 +670,7 @@ class MiniCam:
             .cuda()
         )
         self.full_proj_transform = self.world_view_transform @ self.projection_matrix
-        self.camera_center = -torch.tensor(c2w[:3, 3]).cuda()
+        self.camera_center = torch.tensor(c2w[:3, 3]).cuda()
 
 
 class Renderer:

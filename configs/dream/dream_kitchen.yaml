@@ -1,0 +1,88 @@
+### Input
+# input rgba image path (default to None, can be load in GUI too)
+input: 
+# input text prompt (default to None, can be input in GUI too)
+prompt: "a photo of a a model bulldozer made from building blocks"
+negative_prompt:
+# input mesh for stage 2 (auto-search from stage 1 output path if None)
+mesh:
+# estimated elevation angle for input image 
+elevation: 0
+# reference image resolution
+ref_size: 256
+# density thresh for mesh extraction
+density_thresh: 1
+
+### Output
+outdir: logs
+mesh_format: obj
+save_path: ???
+
+### Training
+# use mvdream instead of sd 2.1
+mvdream: False
+# use imagedream
+imagedream: False
+# use stable-zero123 instead of zero123-xl
+stable_zero123: True
+# guidance loss weights (0 to disable)
+lambda_sd: 1
+lambda_zero123: 0
+sdsiter: 300
+# warmup rgb supervision for image-to-3d
+warmup_rgb_loss: True
+# training batch size per iter
+batch_size: 1
+# training iterations for stage 1
+iters: 300
+# whether to linearly anneal timestep
+anneal_timestep: True
+random_n: 50
+
+# training camera radius
+radius: 3
+# training camera fovy
+_fovy: 30
+fovy: 0.6204925421330122
+fovx: 0.8982269989279291
+_H: 800
+_W: 800
+min_ver: -10
+# training camera max elevation
+max_ver: 40
+# checkpoint to load for stage 1 (should be a ply file)
+load: output/kitchen/object_49/
+# whether allow geom training in stage 2
+train_geo: False
+# prob to invert background color during training (0 = always black, 1 = always white)
+invert_bg_prob: 0.5
+
+
+### GUI
+gui: False
+force_cuda_rast: False
+# GUI resolution
+H: 1040
+W: 1560
+
+### Gaussian splatting
+num_pts: 500000
+sh_degree: 3
+position_lr_init: 0.00016
+position_lr_final: 0.0000016
+position_lr_delay_mult: 0.01
+position_lr_max_steps: 500
+feature_lr: 0.0025
+opacity_lr: 0.05
+scaling_lr: 0.005
+rotation_lr: 0.001
+percent_dense: 0.01
+density_start_iter: 0
+density_end_iter: 3000
+densification_interval: 100
+opacity_reset_interval: 700
+densify_grad_threshold: 0.01
+
+### Textured Mesh
+geom_lr: 0.0001
+texture_lr: 0.2

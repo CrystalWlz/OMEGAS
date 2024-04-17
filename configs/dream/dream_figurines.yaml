@@ -2,7 +2,7 @@
 # input rgba image path (default to None, can be load in GUI too)
 input: 
 # input text prompt (default to None, can be input in GUI too)
-prompt:
+prompt: "a photo of a stylized, cartoonish character resembling a four-legged animal. It has a bright yellow body with a glossy, smooth texture that suggests a plastic or rubbery material."
 negative_prompt:
 # input mesh for stage 2 (auto-search from stage 1 output path if None)
 mesh:
@@ -26,27 +26,32 @@ imagedream: False
 # use stable-zero123 instead of zero123-xl
 stable_zero123: True
 # guidance loss weights (0 to disable)
-lambda_sd: 0
-lambda_zero123: 1
+lambda_sd: 1
+lambda_zero123: 0
+sdsiter: 400
 # warmup rgb supervision for image-to-3d
 warmup_rgb_loss: True
 # training batch size per iter
 batch_size: 1
 # training iterations for stage 1
-iters: 50
+iters: 400
 # whether to linearly anneal timestep
 anneal_timestep: True
+random_n: 100
 
 # training camera radius
 radius: 2
 # training camera fovy
-fovy: 49.1 # align with zero123 rendering setting (ref: https://github.com/cvlab-columbia/zero123/blob/main/objaverse-rendering/scripts/blender_script.py#L61
-# training camera min elevation
-min_ver: -30
+_fovy: 30
+fovy: 0.870567559452835
+fovx: 1.1298794333467281 
+_H: 800
+_W: 800
+min_ver: -10
 # training camera max elevation
-max_ver: 30
+max_ver: 10
 # checkpoint to load for stage 1 (should be a ply file)
-load:
+load: output/figurines/object_67/
 # whether allow geom training in stage 2
 train_geo: False
 # prob to invert background color during training (0 = always black, 1 = always white)
@@ -57,22 +62,22 @@ invert_bg_prob: 0.5
 gui: False
 force_cuda_rast: False
 # GUI resolution
-H: 800
-W: 800
+H: 728
+W: 986
 
 ### Gaussian splatting
 num_pts: 500000
 sh_degree: 3
-position_lr_init: 0.001
-position_lr_final: 0.00002
-position_lr_delay_mult: 0.02
+position_lr_init: 0.00016
+position_lr_final: 0.0000016
+position_lr_delay_mult: 0.01
 position_lr_max_steps: 500
-feature_lr: 0.01
+feature_lr: 0.0025
 opacity_lr: 0.05
 scaling_lr: 0.005
-rotation_lr: 0.005
+rotation_lr: 0.001
 percent_dense: 0.01
-density_start_iter: 100
+density_start_iter: 0
 density_end_iter: 3000
 densification_interval: 100
 opacity_reset_interval: 700

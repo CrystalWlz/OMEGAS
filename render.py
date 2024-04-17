@@ -9,7 +9,7 @@
 import torch
 from gaussian_splatting.scene import Scene
 import os
-os.environ["CUDA_VISIBLE_DEVICES"] = "2"
+# os.environ["CUDA_VISIBLE_DEVICES"] = "1"
 # os.environ["CUDA_LAUNCH_BLOCKING"] = "1"
 from tqdm import tqdm
 from os import makedirs
@@ -149,7 +149,7 @@ def render_sets(dataset : ModelParams, iteration : int, pipeline : PipelineParam
         if not skip_train:
              render_set(dataset.model_path, "train", scene.loaded_iter, scene.getTrainCameras(), gaussians, pipeline, background, classifier)
 
-        if (not skip_test) and (len(scene.getTestCameras()) > 0):
+        if (not skip_test):
              render_set(dataset.model_path, "test", scene.loaded_iter, scene.getTestCameras(), gaussians, pipeline, background, classifier)
 
 if __name__ == "__main__":
