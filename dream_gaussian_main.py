@@ -1,6 +1,6 @@
 import os
 from os import makedirs
-os.environ["CUDA_VISIBLE_DEVICES"] = "0"
+# os.environ["CUDA_VISIBLE_DEVICES"] = "0"
 import cv2
 import time
 import tqdm

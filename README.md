@@ -173,7 +173,7 @@ python train.py -s ~/Code/OMEGS/output/figurines/object_67/ -c ~/Code/OMEGS/outp
 ## Tips for using SuGaR on your own data and obtain better reconstructions
 
 
-### 2. Estimate camera poses with COLMAP
+###  Estimate camera poses with COLMAP
 
 Please first install a recent version of COLMAP (ideally CUDA-powered) and make sure to put the images you want to use in a directory `<location>/input`. Then, run the script `gaussian_splatting/convert.py` from the original Gaussian splatting implementation to compute the camera poses from the images using COLMAP. Please refer to the original <a href="https://github.com/graphdeco-inria/gaussian-splatting">3D Gaussian Splatting repository</a> for more details.
 
@@ -191,33 +191,6 @@ python gaussian_splatting/convert.py -s <location> --skip_matching
 
 _Note: If the sub-models have common registered images, they could be merged into a single model as post-processing step using COLMAP; However, merging sub-models requires to run another global bundle adjustment after the merge, which can be time consuming._
 
-
-
-### 4. (Optional) Adapt the scale and the bounding box of the scene
-
-As it is explained in the original <a href="https://github.com/graphdeco-inria/gaussian-splatting">3D Gaussian Splatting repository</a>, the method is expected to reconstruct a scene with reasonable scale. For reconstructing much larger datasets, like a city district, the original authors recommend to lower the learning rates of the positions and scaling factors of the Gaussians. The more extensive the scene, the lower these values should be.
-
-Concerning SuGaR, such learning rates should also be lowered when reconstructing a very large scene. Moreover, as we explain in the supplementary material of the paper, for extracting a mesh from the Gaussians with an optimal repartition of vertices, we apply two Poisson reconstructions in practice: one on _foreground_ Gaussians, and one on _background_ Gaussians. The foreground Gaussians are defined as the Gaussians located inside a predefined bounding box, and the background Gaussians are defined as the Gaussians located outside this bounding box. 
-
-By default, this bounding box is computed as the bounding box of all camera centers. This general approach is coherent with how the original 3D Gaussian Splatting scales the learning rates. We used this default bounding box for all the reconstructions shown in the paper and the presentation video.
-
-However, this bounding box might not be optimal in very specific cases, especially when the user wants to reconstruct with high details a very specific object located somewhere in the scene, or if the scene is very large, or if the camera centers are very far from the scene.
-The user is free to provide a custom bounding box to the `train.py` script, using the parameters `--bboxmin` and `--bboxmax`. Please note that the bounding box must be provided as strings, formatted as `"(x,y,z)"`, where `x`, `y` and `z` are the coordinates of the min and max points of the bounding box.
-
-
-## Rendering, composition and animation
-
-The `metrics.py` script provides an example of how to load a refined SuGaR model for rendering a scene with the hybrid representation and the Gaussian Splatting rasterizer. We will add more details about this in a near future, as well as a notebook with a detailed tutorial.
-
-We also provide in the `blender` directory several python scripts to export from Blender composition and animation data of SuGaR meshes modified or animated within Blender. Additionally, we provide in the `sugar_scene/sugar_compositor.py` script a Python class that can be used to import such animation or composition data into PyTorch and apply it to the SuGaR hybrid representation. 
-
-The hybrid representation allows for high-quality rendering of the scene with the Gaussian Splatting rasterizer, as shown below.<br>
-
-<div align="center" >
-<img src="./media/blender/full_teaser.png" alt="teaser.gif" width="800"/>
-</div><br>
-
-The usage of these scripts and class may be a bit tricky, so we will add a detailed tutorial on how to use them in a near future.
 
 
 ## Evaluation
