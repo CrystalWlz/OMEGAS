@@ -1,4 +1,4 @@
-name: gss
+name: omg
 channels:
   - pytorch3d
   - plotly
