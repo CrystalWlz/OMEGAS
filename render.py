@@ -26,7 +26,7 @@ import cv2
 from sklearn.decomposition import PCA
 
 def feature_to_rgb(features):
-    # Input features shape: (16, H, W)
+    # Input features shape: (8, H, W)
     
     # Reshape features for PCA
     H, W = features.shape[1], features.shape[2]
