@@ -27,11 +27,13 @@ OMEGAS employs a multi-step approach, grounded in several excellent off-the-shel
 ## BibTeX
 
 ```
-@article{guedon2023sugar,
-  title={SuGaR: Surface-Aligned Gaussian Splatting for Efficient 3D Mesh Reconstruction and High-Quality Mesh Rendering},
-  author={Gu{\'e}don, Antoine and Lepetit, Vincent},
-  journal={arXiv:2311.12775},
-  year={2023},
+@misc{wang2024omegas,
+  title={OMEGAS: Object Mesh Extraction from Large Scenes Guided by Gaussian Segmentation}, 
+  author={Lizhi Wang and Feng Zhou and Jianqin Yin},
+  year={2024},
+  eprint={2404.15891},
+  archivePrefix={arXiv},
+  primaryClass={cs.CV}
 }
 ```
 
@@ -49,7 +51,7 @@ OMEGAS employs a multi-step approach, grounded in several excellent off-the-shel
 The software requirements are the following:
 - Conda (recommended for easy setup)
 - C++ Compiler for PyTorch extensions
-- CUDA toolkit 11.8 for PyTorch extensions
+- CUDA toolkit 11.7 for PyTorch extensions
 - C++ Compiler and CUDA SDK must be compatible
 
 Please refer to the original <a href="https://github.com/graphdeco-inria/gaussian-splatting">3D Gaussian Splatting repository</a> for more details about requirements.
@@ -84,7 +86,7 @@ conda activate omg
 Then you can try to install the required packages manually by running the following commands:
 ```shell
 conda create --name omg -y python=3.9
-conda activate sugar
+conda activate omg
 conda install pytorch==2.0.1 torchvision==0.15.2 torchaudio==2.0.2 pytorch-cuda=11.7 -c pytorch -c nvidia
 conda install -c fvcore -c iopath -c conda-forge fvcore iopath
 conda install pytorch3d -c pytorch3d==0.7.5
@@ -101,7 +103,7 @@ pip install --upgrade PyMCubes
 
 ### 3. Install the Gaussian Splatting rasterizer
 
-Run the following commands inside the sugar directory to install the additional Python submodules required for Gaussian Splatting:
+Run the following commands inside the OMEGAS directory to install the additional Python submodules required for Gaussian Splatting:
 
 ```shell
 cd gaussian_splatting/submodules/diff-gaussian-rasterization/
@@ -129,33 +131,73 @@ python -m pip install -e GroundingDINO
 cd ../..
 ```
 
+### 5. Install the SuGaR
+
+To install the required Python packages and activate the environment, run the following commands:
+
+```shell
+cd SuGaR
+conda env create -f environment.yml
+conda activate sugar
+```
+
+<details>
+<summary><span style="font-weight: bold;">If this command fails to create a working environment</span></summary>
+
+Then you can try to install the required packages manually by running the following commands:
+```shell
+conda create --name sugar -y python=3.9
+conda activate sugar
+conda install pytorch==2.0.1 torchvision==0.15.2 torchaudio==2.0.2 pytorch-cuda=11.7 -c pytorch -c nvidia
+conda install -c fvcore -c iopath -c conda-forge fvcore iopath
+conda install pytorch3d==0.7.4 -c pytorch3d
+conda install -c plotly plotly
+conda install -c conda-forge rich
+conda install -c conda-forge plyfile==0.8.1
+conda install -c conda-forge jupyterlab
+conda install -c conda-forge nodejs
+conda install -c conda-forge ipywidgets
+pip install open3d
+pip install --upgrade PyMCubes
+```
+</details>
+
+Run the following commands inside the sugar directory to install the additional Python submodules required for Gaussian Splatting:
+
+```shell
+cd gaussian_splatting/submodules/diff-gaussian-rasterization/
+pip install -e .
+cd ../simple-knn/
+pip install -e .
+cd ../../../
+```
+Please refer to the <a href="https://github.com/graphdeco-inria/gaussian-splatting">3D Gaussian Splatting repository</a> for more details.
 
 ## Quick Start
 
 ```shell
+conda activate omg
+
 python run_gaussian.py -s data/truck -m output/truck
 
-python extract_object.py -m output/truck_test_cos --config_file configs/gaussian_dataset/truck.json
-复制classifier.pth
-复制cameras.json、cfg_args
-复制sparse
+python gs_extract.py -m output/truck/object_104/ --config_file configs/gaussian_dataset/truck.json
 
-python dream_gaussian_main.py --config configs/dream_image.yaml load=output/truck/object_104/  input=output/truck/object_104/images/000057.jpg
-python dream_gaussian_main.py --config configs/dream_image.yaml load=output/teatime/object_97/ input=output/teatime/object_97/images/frame_00129.jpg
 python dream_gaussian_main.py --config configs/dream_truck.yaml load=output/truck/object_104/ prompt="a photo of a truck"
+``````
+
+You can also manually select the ID of the target object and extract the Gaussian.
+
+```shell
+python extract_object.py -m output/truck_test_cos --config_file configs/gaussian_dataset/truck.json
 
 python render_obj.py -m output/truck_test_cos/object_104/ --config_file configs/gaussian_dataset/truck.json
-
-python render.py -m output/truck_test_cos/object_102/
-
-conda activate sugar
-
 ``````
 
 Start by optimizing a vanilla Gaussian Splatting model for 7k iterations by running the script `gaussian_splatting/train.py`, as shown below. Please refer to the original <a href="https://github.com/graphdeco-inria/gaussian-splatting">3D Gaussian Splatting repository</a> for more details. This optimization should be very fast, and last only a few minutes.
 
 ```shell
 cd SuGaR
+conda activate sugar
 python gaussian_splatting/train.py -s <path to COLMAP or NeRF Synthetic dataset> --iterations 7000 -m <path to the desired output directory>
 ```
 
