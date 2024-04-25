@@ -37,7 +37,6 @@ share/python-wheels/
 MANIFEST
 output/
 data/
-dust3r/
 
 # PyInstaller
 #  Usually these files are written by a python script from a template
@@ -140,7 +139,6 @@ dmypy.json
 # Pyre type checker
 .pyre/
 learnableearthparser/fast_sampler/_sampler.c
-submodules/
 result/
 
 *.cmake

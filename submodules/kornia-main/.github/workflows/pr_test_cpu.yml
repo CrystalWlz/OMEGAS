@@ -1,0 +1,79 @@
+name: Tests on CPU (PR)
+
+on:
+  push:
+    branches: [test-me-*]
+  pull_request:
+    branches: [main]
+    types: [opened, reopened, synchronize, ready_for_review]
+  workflow_dispatch:
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  tests-cpu:
+    # This job run just tests not marked as slow, and desselect the dynamo tests
+    strategy:
+      fail-fast: true
+      matrix:
+        os: ['Ubuntu-latest', 'Windows-latest', 'MacOS-latest']
+        pytorch-dtype: ['float32', 'float64']
+        exclude:
+          - os: 'Windows-latest'
+            pytorch-dtype: 'float64'
+          - os: 'MacOS-latest'
+            pytorch-dtype: 'float64'
+
+    uses: ./.github/workflows/tests.yml
+    with:
+      os: ${{ matrix.os }}
+      python-version: '["3.8", "3.11"]'
+      pytorch-version: '["1.9.1", "2.1.2"]'
+      pytorch-dtype: ${{ matrix.pytorch-dtype }}
+
+
+  tests-coverage:
+    # This job run all test suite
+    uses: ./.github/workflows/tests.yml
+    with:
+      python-version: '["3.11"]'
+      pytorch-version: '["2.1.2"]'
+      pytorch-dtype: 'float32,float64'
+      coverage: true
+      pytest-extra: '--runslow'
+
+  test-typing:
+    uses: ./.github/workflows/test_typing.yml
+
+  test-tutorials:
+    uses: ./.github/workflows/test_tutorials.yml
+
+  docs:
+    uses: ./.github/workflows/docs.yml
+
+  collector:
+    needs: [tests-cpu, test-tutorials, test-typing, tests-coverage, docs]
+    if: always()
+    runs-on: ubuntu-latest
+    steps:
+    - name: check for failures
+      if: contains(needs.*.result, 'failure') || contains(needs.*.result, 'cancelled')
+      run: echo job failed && exit 1
+
+  tests-nightly:
+    if:  contains(github.event.pull_request.labels.*.name, 'nightly')
+    name: ${{ matrix.os }} - torch-nightly, ${{ matrix.pytorch-dtype }}
+
+    strategy:
+      fail-fast: false
+      matrix:
+        os: ['Ubuntu-latest', 'Windows-latest'] #, 'MacOS-latest'] add it when https://github.com/pytorch/pytorch/pull/89262 be merged
+        pytorch-dtype: ['float32', 'float64']
+
+    uses: ./.github/workflows/tests.yml
+    with:
+      os: ${{ matrix.os }}
+      pytorch-version: '["nightly"]'
+      pytorch-dtype: ${{ matrix.pytorch-dtype }}

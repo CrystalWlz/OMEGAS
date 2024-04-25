@@ -1,0 +1,9 @@
+coverage
+kornia-rs==0.0.8
+mypy[reports]
+numpy
+onnx
+pre-commit>=2
+pydocstyle
+pytest==7.4.4
+pytest-timeout
