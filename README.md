@@ -120,6 +120,7 @@ Please refer to the <a href="https://github.com/graphdeco-inria/gaussian-splatti
 cd Tracking-Anything-with-DEVA
 pip install -e .
 bash scripts/download_models.sh     # Download the pretrained models
+cd ..
 
 git clone https://github.com/hkchengrex/Grounded-Segment-Anything.git
 cd Grounded-Segment-Anything
@@ -128,7 +129,7 @@ export BUILD_WITH_CUDA=True
 python -m pip install -e segment_anything
 python -m pip install -e GroundingDINO
 
-cd ../..
+cd ..
 ```
 
 ### 5. Install the SuGaR
@@ -180,7 +181,7 @@ conda activate omg
 
 python run_gaussian.py -s data/truck -m output/truck
 
-python gs_extract.py -m output/truck/object_104/ --config_file configs/gaussian_dataset/truck.json
+python gs_extract.py -s data/truck -m output/truck/ --config_file configs/gaussian_dataset/truck.json
 
 python dream_gaussian_main.py --config configs/dream_truck.yaml load=output/truck/object_104/ prompt="a photo of a truck"
 ``````

@@ -295,8 +295,9 @@ if __name__ == "__main__":
     safe_state(args.quiet)
     if args.select_obj_id:
         extract(model.extract(args), args.iteration, opt.extract(args), args.select_obj_id, args.removal_thresh)
+        id = args.select_obj_id
     else:
         id = choose_id(model.extract(args), args.iteration, opt.extract(args), args.prompt, args.grounding_thresh)
         extract(model.extract(args), args.iteration, opt.extract(args), id, args.removal_thresh)
         
-    render_sets(model.extract(args), args.iteration, pipeline.extract(args), args.skip_train, args.skip_test, args.select_obj_id)
+    render_sets(model.extract(args), args.iteration, pipeline.extract(args), args.skip_train, args.skip_test, id)
