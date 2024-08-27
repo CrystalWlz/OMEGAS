@@ -18,26 +18,25 @@ Beijing University of Posts and Telecommunications, Beijing, China
  <a href="https://arxiv.org/abs/2404.15891">arXiv</a> 
 
 <img src="./media/examples/bear.gif" alt="bear.gif" width="350"/> <br>
-<b>Our method extracts meshes from 3D Gaussian Splatting reconstructions and build hybrid representations <br>that enable easy composition and animation in Gaussian Splatting scenes by manipulating the mesh.</b>
+<b>Our method extracts meshes from 2D Gaussian Splatting reconstructions and build hybrid representations <br>that enable easy composition and animation in Gaussian Splatting scenes by manipulating the mesh.</b>
 </div>
 
 ## Abstract
 
-Recent advancements in 3D reconstruction technologies have paved the way for high-quality and real-time rendering of complex 3D scenes. Despite these achievements, a notable challenge persists: it is difficult to precisely reconstruct specific objects from large scenes. Current scene reconstruction techniques frequently result in the loss of object detail textures and are unable to reconstruct object portions that are occluded or unseen in views. To address this challenge, we delve into the meticulous 3D reconstruction of specific objects within large scenes and propose a framework termed OMEGAS: Object Mesh Extraction from Large Scenes Guided by GAussian Segmentation. 
-
-OMEGAS employs a multi-step approach, grounded in several excellent off-the-shelf methodologies. Specifically, initially, we utilize the Segment Anything Model (SAM) to guide the segmentation of 3D Gaussian Splatting (3DGS), thereby creating a basic 3DGS model of the target object. Then, we leverage large-scale diffusion priors to further refine the details of the 3DGS model, especially aimed at addressing invisible or occluded object portions from the original scene views. Subsequently, by re-rendering the 3DGS model onto the scene views, we achieve accurate object segmentation and effectively remove the background. Finally, these target-only images are used to improve the 3DGS model further and extract the definitive 3D object mesh by the SuGaR model. In various scenarios, our experiments demonstrate that OMEGAS significantly surpasses existing scene reconstruction methods.
+Recent advancements in 3D reconstruction technologies have paved the way for high-quality and real-time rendering of complex 3D scenes. Despite these achievements, a notable challenge persists: it is difficult to precisely reconstruct specific objects from large scenes. Current scene reconstruction techniques frequently result in the loss of object detail textures and are unable to reconstruct object portions that are occluded or unseen in views. To address this challenge, we delve into the meticulous 3D reconstruction of specific objects within large scenes and propose a framework termed OMEGAS: Object Mesh Extraction from Large Scenes Guided by Gaussian Segmentation. Specifically, we proposed a novel 3D target segmentation technique based on 2D Gaussian Splatting, which segments 3D consistent target masks in multi-view scene images and generates a preliminary target model. Moreover, to reconstruct the unseen portions of the target, we propose a novel target replenishment technique driven by large-scale generative diffusion priors. We demonstrate that our method can accurately reconstruct specific targets from large scenes, both quantitatively and qualitatively. Our experiments show that OMEGAS significantly outperforms existing reconstruction methods across various scenarios.
 
 
 ## BibTeX
 
 ```
-@misc{wang2024omegas,
-  title={OMEGAS: Object Mesh Extraction from Large Scenes Guided by Gaussian Segmentation}, 
-  author={Lizhi Wang and Feng Zhou and Jianqin Yin},
-  year={2024},
-  eprint={2404.15891},
-  archivePrefix={arXiv},
-  primaryClass={cs.CV}
+@misc{wang2024omegasobjectmeshextraction,
+      title={OMEGAS: Object Mesh Extraction from Large Scenes Guided by Gaussian Segmentation}, 
+      author={Lizhi Wang and Feng Zhou and Bo yu and Pu Cao and Jianqin Yin},
+      year={2024},
+      eprint={2404.15891},
+      archivePrefix={arXiv},
+      primaryClass={cs.CV},
+      url={https://arxiv.org/abs/2404.15891}, 
 }
 ```
 
@@ -81,7 +80,7 @@ To install the required Python packages and activate the environment, go inside 
 
 ```shell
 conda env create -f environment.yml
-conda activate gss
+conda activate omg
 pip install -r requirements.txt
 conda install pytorch3d::pytorch3d
 ```
