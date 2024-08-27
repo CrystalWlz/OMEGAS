@@ -9,7 +9,7 @@
 import torch
 from gaussian_splatting.scene_2D import Scene
 import os
-os.environ["CUDA_VISIBLE_DEVICES"] = "1"
+# os.environ["CUDA_VISIBLE_DEVICES"] = "1"
 from tqdm import tqdm
 from os import makedirs
 from gaussian_splatting.gaussian_renderer_2D import render

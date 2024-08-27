@@ -1,0 +1,72 @@
+name: Tests on CPU (scheduled)
+
+on:
+  push:
+    branches: [main, test-me-*]
+  schedule:
+    - cron: "0 4 * * *"
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  tests-cpu-ubuntu:
+    strategy:
+      fail-fast: false
+      matrix:
+        # os: ['Ubuntu-latest', 'Windows-latest', 'MacOS-latest']
+        pytorch-dtype: ['float32', 'float64']
+
+    uses: ./.github/workflows/tests.yml
+    with:
+      os: 'Ubuntu-latest'
+      python-version: '["3.8", "3.9", "3.10", "3.11"]'
+      pytorch-version: '["1.9.1", "1.10.2", "1.11.0", "1.12.1", "1.13.1", "2.0.1", "2.1.2"]'
+      pytorch-dtype: ${{ matrix.pytorch-dtype }}
+      pytest-extra: '--runslow'
+
+
+
+  tests-cpu-windows:
+    strategy:
+      fail-fast: true
+      matrix:
+        pytorch-dtype: ['float32', 'float64']
+
+    uses: ./.github/workflows/tests.yml
+    with:
+      os: 'Windows-latest'
+      python-version: '["3.11"]'
+      pytorch-version: '["1.9.1", "2.1.2"]'
+      pytorch-dtype: ${{ matrix.pytorch-dtype }}
+
+  tests-cpu-mac:
+    strategy:
+      fail-fast: true
+      matrix:
+        pytorch-dtype: ['float32', 'float64']
+
+    uses: ./.github/workflows/tests.yml
+    with:
+      os: 'MacOS-latest'
+      pytorch-dtype: ${{ matrix.pytorch-dtype }}
+
+  test-tutorials:
+    uses: ./.github/workflows/test_tutorials.yml
+
+  test-typing:
+    uses: ./.github/workflows/test_typing.yml
+
+  docs:
+    uses: ./.github/workflows/docs.yml
+
+  tests-coverage:
+    uses: ./.github/workflows/tests.yml
+    with:
+      python-version: '["3.11"]'
+      pytorch-version: '["2.1.2"]'
+      pytorch-dtype: 'float32,float64'
+      coverage: true
+      continue-on-error: true
+      pytest-extra: '--runslow'

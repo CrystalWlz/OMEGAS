@@ -37,8 +37,6 @@ share/python-wheels/
 MANIFEST
 output/
 data/
-Tracking-Anything-with-DEVA/
-dust3r/
 
 # PyInstaller
 #  Usually these files are written by a python script from a template
@@ -141,11 +139,6 @@ dmypy.json
 # Pyre type checker
 .pyre/
 learnableearthparser/fast_sampler/_sampler.c
-gaussian_splatting/SIBR_viewers/
-gaussian_splatting/submodules/diff-gaussian-rasterization/third_party/
-gaussian_splatting/submodules/diff-gaussian-rasterization-od/third_party/
-spin_nerf/
-submodules/
-dreamgaussian/diff-gaussian-rasterization-dm
 result/
 
+*.cmake
