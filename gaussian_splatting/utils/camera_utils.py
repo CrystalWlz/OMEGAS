@@ -8,18 +8,22 @@
 #
 # For inquiries contact  george.drettakis@inria.fr
 #
-
-from gaussian_splatting.scene.cameras import Camera
 import numpy as np
+import torch
+from gaussian_splatting.scene_2D.cameras import Camera
 from gaussian_splatting.utils.general_utils import PILtoTorch
 from gaussian_splatting.utils.graphics_utils import fov2focal
-import torch
+
+# from scene.cameras import Camera
+# from utils.general_utils import PILtoTorch
+# from utils.graphics_utils import fov2focal
+
 
 WARNED = False
 
 def loadCam(args, id, cam_info, resolution_scale):
     orig_w, orig_h = cam_info.image.size
-    print(cam_info.FovX, cam_info.FovY)
+    # print(cam_info.FovX, cam_info.FovY)
     if args.resolution in [1, 2, 4, 8]:
         resolution = round(orig_w/(resolution_scale * args.resolution)), round(orig_h/(resolution_scale * args.resolution))
     else:  # should be a type that converts to float
@@ -39,19 +43,35 @@ def loadCam(args, id, cam_info, resolution_scale):
         scale = float(global_down) * float(resolution_scale)
         resolution = (int(orig_w / scale), int(orig_h / scale))
 
-    resized_image_rgb = PILtoTorch(cam_info.image, resolution)
+    if len(cam_info.image.split()) > 3:
+        resized_image_rgb = torch.cat([PILtoTorch(im, resolution) for im in cam_info.image.split()[:3]], dim=0)
+        loaded_mask = PILtoTorch(cam_info.image.split()[3], resolution)
+        gt_image = resized_image_rgb
+    else:
+        resized_image_rgb = PILtoTorch(cam_info.image, resolution)
+        # loaded_mask = None
+        if cam_info.alpha_mask is not None:
+            loaded_mask = PILtoTorch(cam_info.alpha_mask, resolution)
+        else:
+            loaded_mask = None
+        gt_image = resized_image_rgb
+        
     
-    # resized_objects = PILtoTorch(cam_info.objects, resolution)
+    # resized_image_rgb = PILtoTorch(cam_info.image, resolution)
     
-    resized_objects = cam_info.objects.resize(resolution)
-    gt_objects = torch.from_numpy(np.array(resized_objects))
+    # # resized_objects = PILtoTorch(cam_info.objects, resolution)
+    if cam_info.objects is not None:
+        resized_objects = cam_info.objects.resize(resolution)
+        gt_objects = torch.from_numpy(np.array(resized_objects))
+    else:
+        gt_objects = None
 
-    gt_image = resized_image_rgb[:3, ...]
+    # gt_image = resized_image_rgb
     # gt_objects = resized_objects[:1, ...]
-    loaded_mask = None
+    # loaded_mask = None
 
-    if resized_image_rgb.shape[1] == 4:
-        loaded_mask = resized_image_rgb[3:4, ...]
+    # if resized_image_rgb.shape[1] == 4:
+    #     loaded_mask = resized_image_rgb[3:4, ...]
 
     return Camera(colmap_id=cam_info.uid, R=cam_info.R, T=cam_info.T, 
                   FoVx=cam_info.FovX, FoVy=cam_info.FovY, 
@@ -88,3 +108,5 @@ def camera_to_JSON(id, camera : Camera):
         'fx' : fov2focal(camera.FovX, camera.width)
     }
     return camera_entry
+
+

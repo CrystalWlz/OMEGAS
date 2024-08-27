@@ -5,35 +5,49 @@
 # ------------------------------------------------------------------------
 # Modified from codes in Gaussian-Splatting 
 # GRAPHDECO research group, https://team.inria.fr/graphdeco
-
-import torch
-
-# from gaussian_splatting.scene import Scene
-# from gaussian_splatting.gaussian_renderer import render
-# from gaussian_splatting.scene.gaussian_model import GaussianModel
-
-from gaussian_splatting.scene_2D import Scene
-from gaussian_splatting.gaussian_renderer_2D import render
-from gaussian_splatting.scene_2D.gaussian_model import GaussianModel
-
 import os
+os.environ["CUDA_VISIBLE_DEVICES"] = "3"
+from os import makedirs
+import torch
+import json
 from tqdm import tqdm
 import numpy as np
 from PIL import Image
 import colorsys
 import cv2
-from os import makedirs
-
 import torchvision
-os.environ["CUDA_VISIBLE_DEVICES"] = "3"
-from gaussian_splatting.utils.general_utils import safe_state
 from argparse import ArgumentParser
+from gaussian_splatting.utils.general_utils import safe_state
 from gaussian_splatting.arguments import ModelParams, PipelineParams, OptimizationParams, get_combined_args
+# from gaussian_splatting.scene.gaussian_model import GaussianModel
+# from gaussian_splatting.gaussian_renderer import render
+# from gaussian_splatting.scene import Scene
+from gaussian_splatting.scene_2D import Scene
+from gaussian_splatting.scene_2D.gaussian_model import GaussianModel
+from gaussian_splatting.gaussian_renderer_2D import render
+
+
 
 from sklearn.decomposition import PCA
-import json
 from scipy.spatial import ConvexHull, Delaunay
+from ext.grounded_sam import grouned_sam_output, load_model_hf
+from segment_anything import sam_model_registry, SamPredictor
+from render import feature_to_rgb, visualize_obj
 
+def select_id(classification_maps, mask, ioa_thresh=0.7):
+    unique_classes = classification_maps.unique()
+    classes_above_threshold = []
+
+    for class_id in unique_classes:
+        class_mask = (classification_maps == class_id).byte()
+        class_area = class_mask.sum()
+        intersection = torch.sum(class_mask * mask)
+        ioa = intersection / class_area if class_area != 0 else 0  # Avoid division by zero
+        
+        if ioa > ioa_thresh:
+            classes_above_threshold.append(class_id)
+
+    return classes_above_threshold
 
 def points_inside_convex_hull(point_cloud, mask, remove_outliers=True, outlier_factor=1.0):
     """
@@ -75,55 +89,6 @@ def points_inside_convex_hull(point_cloud, mask, remove_outliers=True, outlier_f
 
     return inside_hull_tensor_mask
 
-
-def feature_to_rgb(features):
-    # Input features shape: (16, H, W)
-    
-    # Reshape features for PCA
-    H, W = features.shape[1], features.shape[2]
-    features_reshaped = features.view(features.shape[0], -1).T
-
-    # Apply PCA and get the first 3 components
-    pca = PCA(n_components=3)
-    pca_result = pca.fit_transform(features_reshaped.cpu().numpy())
-
-    # Reshape back to (H, W, 3)
-    pca_result = pca_result.reshape(H, W, 3)
-
-    # Normalize to [0, 255]
-    pca_normalized = 255 * (pca_result - pca_result.min()) / (pca_result.max() - pca_result.min())
-
-    rgb_array = pca_normalized.astype('uint8')
-
-    return rgb_array
-
-def id2rgb(id, max_num_obj=256):
-    if not 0 <= id <= max_num_obj:
-        raise ValueError("ID should be in range(0, max_num_obj)")
-
-    # Convert the ID into a hue value
-    golden_ratio = 1.14514
-    h = ((id * golden_ratio) % 1)           # Ensure value is between 0 and 1
-    s = 0.5 + (id % 2) * 0.5       # Alternate between 0.5 and 1.0
-    l = 0.5
-
-    
-    # Use colorsys to convert HSL to RGB
-    rgb = np.zeros((3, ), dtype=np.uint8)
-    if id==0:   #invalid region
-        return rgb
-    r, g, b = colorsys.hls_to_rgb(h, l, s)
-    rgb[0], rgb[1], rgb[2] = int(r*255), int(g*255), int(b*255)
-
-    return rgb
-
-def visualize_obj(objects):
-    rgb_mask = np.zeros((*objects.shape[-2:], 3), dtype=np.uint8)
-    all_obj_ids = np.unique(objects)
-    for id in all_obj_ids:
-        colored_mask = id2rgb(id)
-        rgb_mask[objects == id] = colored_mask
-    return rgb_mask
 
 def visualize_gt(objects,target_obj):
     obj_mask = np.zeros((*objects.shape[-2:], 3), dtype=np.uint8)
@@ -214,6 +179,57 @@ def render_sets(dataset : ModelParams, iteration : int, pipeline : PipelineParam
         if (not skip_test) and (len(scene.getTestCameras()) > 0):
              render_set(dataset.model_path, "test", scene.loaded_iter, scene.getTestCameras(), gaussians, pipeline, background, classifier, target_obj)
 
+def choose_id(dataset : ModelParams, iteration : int,  opt : OptimizationParams, prompt, threshold=0.5, choose_view = 0):
+    id = []
+    
+    with torch.no_grad():
+        dataset.eval = True
+        gaussians = GaussianModel(dataset.sh_degree)
+        scene = Scene(dataset, gaussians, load_iteration=iteration, shuffle=False)
+        
+        num_classes = dataset.num_classes
+        print("Num classes: ",num_classes)
+
+        classifier = torch.nn.Conv2d(gaussians.num_objects, num_classes, kernel_size=1)
+        classifier.cuda()
+        classifier.load_state_dict(torch.load(os.path.join(dataset.model_path,"point_cloud","iteration_"+str(scene.loaded_iter),"classifier.pth")))
+        bg_color = [1,1,1] if dataset.white_background else [0, 0, 0]
+        background = torch.tensor(bg_color, dtype=torch.float32, device="cuda")
+        
+        # grounding-dino
+        # Use this command for evaluate the Grounding DINO model
+        # Or you can download the model by yourself
+        ckpt_repo_id = "ShilongLiu/GroundingDINO"
+        ckpt_filenmae = "groundingdino_swinb_cogcoor.pth"
+        ckpt_config_filename = "GroundingDINO_SwinB.cfg.py"
+        groundingdino_model = load_model_hf(ckpt_repo_id, ckpt_filenmae, ckpt_config_filename)
+
+        # sam-hq
+        sam_checkpoint = 'Tracking-Anything-with-DEVA/saves/sam_vit_h_4b8939.pth'
+        sam = sam_model_registry["vit_h"](checkpoint=sam_checkpoint)
+        sam.to(device='cuda')
+        sam_predictor = SamPredictor(sam)
+        positives = prompt.split(";")
+        print("Text prompts:    ", positives)
+        
+        for TEXT_PROMPT in positives:
+            views = scene.getTrainCameras()
+            # Use Grounded-SAM on the first frame
+            results0 = render(views[choose_view], gaussians, pipeline, background)
+            rendering0 = results0["render"]
+            rendering_obj0 = results0["render_object"]
+            logits = classifier(rendering_obj0)
+            pred_obj = torch.argmax(logits,dim=0)
+
+            image = (rendering0.permute(1,2,0) * 255).cpu().numpy().astype('uint8')
+            text_mask, annotated_frame_with_mask = grouned_sam_output(groundingdino_model, sam_predictor, TEXT_PROMPT, image)
+            selected_obj_ids = select_id(pred_obj, text_mask, threshold)
+            if selected_obj_ids not in id:
+                print("Found object ID:", selected_obj_ids)
+                id.append(selected_obj_ids)
+    
+    return id
+
 def extract(dataset : ModelParams, iteration : int,  opt : OptimizationParams, obj_id : int, removal_thresh : float):
     # 1. load gaussian checkpoint
     with torch.no_grad():
@@ -233,7 +249,7 @@ def extract(dataset : ModelParams, iteration : int,  opt : OptimizationParams, o
         mask = prob_obj3d[obj_id, :, :] > removal_thresh
         mask3d = mask.any(dim=0).squeeze()
 
-        mask3d_convex = points_inside_convex_hull(gaussians._xyz.detach(),mask3d,outlier_factor=1.0)
+        mask3d_convex = points_inside_convex_hull(gaussians._xyz.detach(), mask3d,outlier_factor=1.0)
         mask3d = torch.logical_or(mask3d,mask3d_convex)
         mask3d = mask3d.float()[:,None,None]
         
@@ -250,7 +266,7 @@ if __name__ == "__main__":
     model = ModelParams(parser, sentinel=True)
     opt = OptimizationParams(parser)
     pipeline = PipelineParams(parser)
-    parser.add_argument("--iteration", default=30000, type=int)
+    parser.add_argument("--iteration", default=7000, type=int)
     parser.add_argument("--skip_train", action="store_true")
     parser.add_argument("--skip_test", action="store_true")
     parser.add_argument("--quiet", action="store_true")
@@ -275,10 +291,17 @@ if __name__ == "__main__":
     args.num_classes = config.get("num_classes")
     args.removal_thresh = config.get("removal_thresh")
     args.select_obj_id = config.get("select_obj_id")
+    args.prompt = config.get("prompt")
+    args.grounding_thresh = config.get("grounding_thresh")
 
     
     # Initialize system state (RNG)
     safe_state(args.quiet)
-
-    extract(model.extract(args), args.iteration, opt.extract(args), args.select_obj_id, args.removal_thresh)
-    render_sets(model.extract(args), args.iteration, pipeline.extract(args), args.skip_train, args.skip_test, args.select_obj_id)
+    if args.select_obj_id:
+        extract(model.extract(args), args.iteration, opt.extract(args), args.select_obj_id, args.removal_thresh)
+        id = args.select_obj_id
+    else:
+        id = choose_id(model.extract(args), args.iteration, opt.extract(args), args.prompt, args.grounding_thresh)
+        extract(model.extract(args), args.iteration, opt.extract(args), id, args.removal_thresh)
+        
+    render_sets(model.extract(args), args.iteration, pipeline.extract(args), args.skip_train, args.skip_test, id)

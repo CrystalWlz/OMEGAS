@@ -1,7 +1,10 @@
 from diffusers import (
     DDIMScheduler,
     StableDiffusionPipeline,
+    StableDiffusionInpaintPipeline,
+    UNet2DConditionModel
 )
+from transformers import CLIPTextModel
 from diffusers.utils.import_utils import is_xformers_available
 
 
@@ -9,6 +12,8 @@ import numpy as np
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
+from tqdm.auto import tqdm
+from einops import repeat
 
 
 def seed_everything(seed):
@@ -25,17 +30,22 @@ class StableDiffusion(nn.Module):
         fp16=True,
         vram_O=False,
         sd_version="2.1",
+
         hf_key=None,
         t_range=[0.02, 0.98],
     ):
         super().__init__()
 
         self.device = device
+        
         self.sd_version = sd_version
 
-        if hf_key is not None:
+        if hf_key != "":
             print(f"[INFO] using hugging face custom model key: {hf_key}")
-            model_key = hf_key
+            
+            model_key = "stabilityai/stable-diffusion-2-1-base"
+            unet_key = './dreamgaussian/dreambooth/{hf_key}_finetuned/unet'
+            encoder_key = './dreamgaussian/dreambooth/{hf_key}_finetuned/text_encoder'
         elif self.sd_version == "2.1":
             model_key = "stabilityai/stable-diffusion-2-1-base"
         elif self.sd_version == "2.0":
@@ -46,13 +56,23 @@ class StableDiffusion(nn.Module):
             raise ValueError(
                 f"Stable-diffusion version {self.sd_version} not supported."
             )
-
         self.dtype = torch.float16 if fp16 else torch.float32
 
         # Create model
-        pipe = StableDiffusionPipeline.from_pretrained(
-            model_key, torch_dtype=self.dtype
-        )
+        pipe = StableDiffusionPipeline.from_pretrained(model_key, torch_dtype=self.dtype)
+
+        inpaint_key = "runwayml/stable-diffusion-inpainting"
+            # Create model
+        inpaint_pipe = StableDiffusionInpaintPipeline.from_pretrained(
+                inpaint_key, torch_dtype=self.dtype,
+                safety_checker=None
+            )
+        # inpaint_pipe = StableDiffusionInpaintPipeline.from_pretrained(
+        #         model_key, torch_dtype=self.dtype,
+        #         safety_checker=None
+        #     )
+        self.inpaint_pipe = inpaint_pipe.to('cuda')
+        self.generator = torch.Generator(device='cuda').manual_seed(1)
 
         if vram_O:
             pipe.enable_sequential_cpu_offload()
@@ -62,12 +82,16 @@ class StableDiffusion(nn.Module):
             # pipe.enable_model_cpu_offload()
         else:
             pipe.to(device)
-
+        if hf_key !='refined_sd':
+            self.text_encoder = pipe.text_encoder
+            self.unet = pipe.unet
+        else:
+            self.text_encoder = CLIPTextModel.from_pretrained(encoder_key, torch_dtype=self.dtype).to('cuda')
+            self.unet = UNet2DConditionModel.from_pretrained(unet_key, torch_dtype=self.dtype).to('cuda')
         self.vae = pipe.vae
         self.tokenizer = pipe.tokenizer
-        self.text_encoder = pipe.text_encoder
-        self.unet = pipe.unet
-
+        
+        
         self.scheduler = DDIMScheduler.from_pretrained(
             model_key, subfolder="scheduler", torch_dtype=self.dtype
         )
@@ -134,7 +158,124 @@ class StableDiffusion(nn.Module):
 
         imgs = self.decode_latents(latents) # [1, 3, 512, 512]
         return imgs
+    
+    @torch.no_grad()
+    def sd_mask(self, rgb, guidance_scale=7.5, steps=100, prompt= ['truck'], render_H = 546, render_W = 979, th = 17, height = 512, width = 512):
+        # torch.manual_seed(1000)
+        seeds = torch.randint(0, 1024, (5,))
+        masks = []
+        for seed in seeds:
+            torch.manual_seed(seed)
+            batch_size = len(prompt)
+            rgb_512 = F.interpolate(rgb, (512, 512), mode='bilinear', align_corners=False)
+            latent = self.encode_imgs(rgb_512.to(self.dtype))
+            # latents = torch.randn((1, 4, 64, 64), device=self.device, dtype=self.dtype)
+            text_input = self.tokenizer(prompt, padding="max_length", max_length=self.tokenizer.model_max_length, truncation=True, return_tensors="pt")
+            
+            text_embeddings = self.text_encoder(text_input.input_ids.to(self.device))[0]
+            
+            max_length = text_input.input_ids.shape[-1]
+            uncond_input = self.tokenizer([""] * batch_size, padding="max_length", max_length=max_length, return_tensors="pt")
+            uncond_embeddings = self.text_encoder(uncond_input.input_ids.to(self.device))[0]
 
+            text_embeddings = torch.cat([uncond_embeddings, text_embeddings])
+            uncond_embeddings = torch.cat([uncond_embeddings, uncond_embeddings])
+            
+            noise = torch.randn((batch_size, self.unet.in_channels, height // 8, width // 8),)
+            noise = noise.to(self.device)
+            noise = noise.half()
+            
+            self.scheduler.set_timesteps(steps)
+            
+            diff_list = []
+            
+            t = torch.tensor(991).to("cuda")
+            latent_input = self.scheduler.add_noise(latent, noise, t)
+            latent_input = torch.cat([latent_input] * 2) if len(prompt) > 0 else latent_input
+            with torch.no_grad():
+                noise_pred = self.unet(latent_input, t, encoder_hidden_states=uncond_embeddings).sample
+            noise_pred_uncond, noise_pred_text = noise_pred.chunk(2)
+            noise_pred = noise_pred_uncond + guidance_scale * (noise_pred_text - noise_pred_uncond)
+
+            # compute the previous noisy sample x_t -> x_t-1
+            # print(f'\n{t}: nosie - noise_pred = {(noise - noise_pred).sum()}')
+
+            # 保存某一步噪声差值，可以先print下scheduler.timesteps看看数组里面的100个t都是几
+            a = (noise - noise_pred)
+            latents = 1 / self.vae.config.scaling_factor * a
+            with torch.no_grad():
+                image = self.vae.decode(latents).sample
+            image = (image / 2 + 0.5).clamp(0, 1)
+            image = image.detach().cpu().permute(0, 2, 3, 1).numpy()[0]
+            image = (image * 255).round().astype("uint8")
+            image = 1 / 3 * image[:, :, 0] + 1 / 3 * image[:, :, 1] + 1 / 3 * image[:, :, 2]
+            threshold = image.max() - th
+            # print(threshold)
+            mask = (image > threshold).astype(float)  # 1：SDS大于阈值的地方，为白色；反之为黑色
+
+            # 恢复到原始尺寸 759x694
+            mask = torch.tensor(mask).unsqueeze(0).unsqueeze(0)  # 添加批次和通道维度
+            mask = F.interpolate(mask, size=(render_H, render_W), mode='bilinear')  # 插值到目标尺寸
+
+            mask = mask.squeeze().numpy()
+            masks.append(mask)
+        masks = np.stack(masks, axis=0)
+        mask_img = np.mean(masks, axis=0).round().astype("uint8")
+        
+        return mask_img
+            # latent = self.scheduler.add_noise(latent, noise, self.scheduler.timesteps[0])
+            # for t in tqdm(self.scheduler.timesteps):
+            #     t =  t.to(self.device)
+            #     # print(t)
+            #     latent_input = torch.cat([latent] * 2) if len(prompt) > 0 else latent
+            #     # predict the noise residual
+            #     with torch.no_grad():
+            #         noise_pred = self.unet(latent_input, t, encoder_hidden_states=torch.cat([uncond_embeddings,uncond_embeddings])).sample
+
+            #     noise_pred_uncond, noise_pred_text = noise_pred.chunk(2)
+            #     noise_pred = noise_pred_uncond + guidance_scale * (noise_pred_text - noise_pred_uncond)
+                
+                
+            #     if t == 901:
+            #         diff = noise - noise_pred
+            #         if diff != None:
+            #             diff_list.append(diff)
+            #         # a = (noise - noise_pred)
+            #         # latent = 1 / self.vae.config.scaling_factor * a
+            #         # with torch.no_grad():
+            #         #     mask = self.vae.decode(latent).sample
+                
+            #     latent = self.scheduler.step(noise_pred, t, latent).prev_sample
+            
+            
+        #     diff_stack = torch.stack(diff_list)
+        #     mean_diff = torch.mean(diff_stack, dim = 0)
+        #     latent = 1 / self.vae.config.scaling_factor * mean_diff
+        #     with torch.no_grad():
+        #         mask = self.vae.decode(latent).sample
+        #     # latent = 1 / self.vae.config.scaling_factor * latent
+
+        #     # # 14. 保存
+        #     # mask = (mask / 2 + 0.5).clamp(0, 1)
+        #     # mask = mask.detach().cpu().permute(0, 2, 3, 1).numpy()
+        #     # masks = (mask * 255).round().astype("uint8")
+        #     # pil_images = [Image.fromarray(image) for image in images]
+        #     # for i, img in enumerate(pil_images):
+        #     #     img.save(f'{image_name}_denoised.png')
+
+
+        #     # imgs = self.decode_latents(latents) # [1, 3, 512, 512]
+        # return mask
+    
+    @torch.no_grad()
+    def inpaint(self, prompt, init_image, mask_image):
+        
+        image = self.inpaint_pipe(prompt=prompt, image=init_image, mask_image=mask_image, generator=self.generator).images[0]
+        
+        return image
+    
+    
+    
     def train_step(
         self,
         pred_rgb,

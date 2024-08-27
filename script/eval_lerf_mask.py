@@ -6,9 +6,13 @@ import sys
 
 dataset_name = sys.argv[1]
 
+# gt_folder_path = os.path.join('data/lerf_mask',dataset_name,'test_mask')
+# # You can change pred_folder_path to your output
+# pred_folder_path = os.path.join('result/lerf_mask',dataset_name,'test','ours_7000_text','test_mask')
 gt_folder_path = os.path.join('data/lerf_mask',dataset_name,'test_mask')
 # You can change pred_folder_path to your output
-pred_folder_path = os.path.join('result/lerf_mask',dataset_name,'test','ours_7000_text','test_mask')
+pred_folder_path = os.path.join('result/lerf_mask_2D',dataset_name,'test','ours_30000_text','test_mask')
+sam_folder_path = os.path.join('result/lerf_mask_2D',dataset_name,'test','ours_30000_text','sam_mask')
 
 # General util function to get the boundary of a binary mask.
 # https://gist.github.com/bowenc0221/71f7a02afee92646ca05efeeb14d687d
@@ -74,28 +78,37 @@ def calculate_iou(mask1, mask2):
 
 iou_scores = {}  # Store IoU scores for each class
 biou_scores = {}
+iou_scores_sam = {}  # Store IoU scores for each class
+biou_scores_sam = {}
 class_counts = {}  # Count the number of times each class appears
 
 # Iterate over each image and category in the GT dataset
 for image_name in os.listdir(gt_folder_path):
     gt_image_path = os.path.join(gt_folder_path, image_name)
     pred_image_path = os.path.join(pred_folder_path, image_name)
+    sam_image_path = os.path.join(sam_folder_path, image_name)
     
     if os.path.isdir(gt_image_path):
         for cat_file in os.listdir(gt_image_path):
             cat_id = cat_file.split('.')[0]  # Assuming cat_file format is "cat_id.png"
             gt_mask_path = os.path.join(gt_image_path, cat_file)
             pred_mask_path = os.path.join(pred_image_path, cat_file)
+            sam_mask_path = os.path.join(sam_image_path, cat_file)
 
             gt_mask = load_mask(gt_mask_path)
             pred_mask = load_mask(pred_mask_path)
+            sam_mask = load_mask(sam_mask_path)
             print("GT:  ",gt_mask_path)
             print("Pred:  ",pred_mask_path)
+            print("SAM:  ",sam_mask_path)
 
-            if gt_mask is not None and pred_mask is not None:
+            if gt_mask is not None and pred_mask is not None and sam_mask is not None:
                 # Resize prediction mask to match GT mask shape if they are different
                 if pred_mask.shape != gt_mask.shape:
                     pred_mask = resize_mask(pred_mask, gt_mask.shape)
+                    
+                if sam_mask.shape != gt_mask.shape:
+                    sam_mask = resize_mask(sam_mask, gt_mask.shape)
 
                 iou = calculate_iou(gt_mask, pred_mask)
                 biou = boundary_iou(gt_mask, pred_mask)
@@ -105,6 +118,16 @@ for image_name in os.listdir(gt_folder_path):
                     biou_scores[cat_id] = []
                 iou_scores[cat_id].append(iou)
                 biou_scores[cat_id].append(biou)
+                
+                iou_sam = calculate_iou(gt_mask, sam_mask)
+                biou_sam = boundary_iou(gt_mask, sam_mask)
+                print("IoU_SAM: ",iou_sam," BIoU_SAM:   ",biou_sam)
+                if cat_id not in iou_scores_sam:
+                    iou_scores_sam[cat_id] = []
+                    biou_scores_sam[cat_id] = []
+                iou_scores_sam[cat_id].append(iou_sam)
+                biou_scores_sam[cat_id].append(biou_sam)
+                
                 class_counts[cat_id] = class_counts.get(cat_id, 0) + 1
 
 # Calculate mean IoU for each class
@@ -115,7 +138,19 @@ mean_biou_per_class = {cat_id: np.mean(biou_scores[cat_id]) for cat_id in biou_s
 overall_mean_iou = np.mean(list(mean_iou_per_class.values()))
 overall_mean_biou = np.mean(list(mean_biou_per_class.values()))
 
+mean_iou_sam_per_class = {cat_id: np.mean(iou_scores_sam[cat_id]) for cat_id in iou_scores}
+mean_biou_sam_per_class = {cat_id: np.mean(biou_scores_sam[cat_id]) for cat_id in biou_scores}
+
+# Calculate overall mean IoU
+overall_mean_iou_sam = np.mean(list(mean_iou_sam_per_class.values()))
+overall_mean_biou_sam = np.mean(list(mean_biou_sam_per_class.values()))
+
 print("Mean IoU per class:", mean_iou_per_class)
 print("Mean Boundary IoU per class:", mean_biou_per_class)
 print("Overall Mean IoU:", overall_mean_iou)
 print("Overall Boundary Mean IoU:", overall_mean_biou)
+
+print("Mean IoU per class of SAM:", mean_iou_sam_per_class)
+print("Mean Boundary IoU per class of SAM:", mean_biou_sam_per_class)
+print("Overall Mean IoU of SAM:", overall_mean_iou_sam)
+print("Overall Boundary Mean IoU of SAM:", overall_mean_biou_sam)

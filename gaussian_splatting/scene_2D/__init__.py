@@ -13,16 +13,14 @@ import os
 import random
 import json
 from gaussian_splatting.utils.system_utils import searchForMaxIteration
-from gaussian_splatting.scene.dataset_readers import sceneLoadTypeCallbacks
-# from gaussian_splatting.scene.gaussian_model import GaussianModel
-from gaussian_splatting.scene.gaussian_model import GaussianModel
+from gaussian_splatting.scene_2D.dataset_readers import sceneLoadTypeCallbacks
+from gaussian_splatting.scene_2D.gaussian_model import GaussianModel
 from gaussian_splatting.arguments import ModelParams
 from gaussian_splatting.utils.camera_utils import cameraList_from_camInfos, camera_to_JSON
 
 # from utils.system_utils import searchForMaxIteration
-# from scene.dataset_readers import sceneLoadTypeCallbacks
-# # from gaussian_splatting.scene.gaussian_model import GaussianModel
-# from scene.gaussian_model import GaussianModel
+# from scene_2D.dataset_readers import sceneLoadTypeCallbacks
+# from scene_2D.gaussian_model import GaussianModel
 # from arguments import ModelParams
 # from utils.camera_utils import cameraList_from_camInfos, camera_to_JSON
 
@@ -48,8 +46,11 @@ class Scene:
         self.train_cameras = {}
         self.test_cameras = {}
 
-        if os.path.exists(os.path.join(args.source_path, "sparse")):
-            scene_info = sceneLoadTypeCallbacks["Colmap"](args.source_path, args.images, args.eval, args.object_path, args.depth_path)
+        if os.path.exists(os.path.join(args.source_path, "cameras.json")):
+            print("Found cameras.json file!")
+            scene_info = sceneLoadTypeCallbacks["Cameras"](args.source_path, args.white_background, args.eval)
+        elif os.path.exists(os.path.join(args.source_path, "sparse")):
+            scene_info = sceneLoadTypeCallbacks["Colmap"](args.source_path, args.images, args.eval, args.object_path, args.depth_path, train_split = args.train_split)
         elif os.path.exists(os.path.join(args.source_path, "transforms_train.json")):
             print("Found transforms_train.json file, assuming Blender data set!")
             scene_info = sceneLoadTypeCallbacks["Blender"](args.source_path, args.white_background, args.eval)

@@ -7,22 +7,22 @@
 # GRAPHDECO research group, https://team.inria.fr/graphdeco
 
 import torch
-from gaussian_splatting.scene import Scene
+from gaussian_splatting.scene_2D import Scene
 import os
 os.environ["CUDA_VISIBLE_DEVICES"] = "1"
 from tqdm import tqdm
 from os import makedirs
-from gaussian_splatting.gaussian_renderer import render
+from gaussian_splatting.gaussian_renderer_2D import render
 import torchvision
 from gaussian_splatting.utils.general_utils import safe_state
 from argparse import ArgumentParser
 from gaussian_splatting.arguments import ModelParams, PipelineParams, get_combined_args
-from gaussian_splatting.gaussian_renderer import GaussianModel
+from gaussian_splatting.gaussian_renderer_2D import GaussianModel
 import numpy as np
 from PIL import Image
 import cv2
 
-from ext.grounded_sam import grouned_sam_output, load_model_hf, select_obj_ioa
+from ext.grounded_sam import grouned_sam_output, load_model_hf, select_obj_ioa, grouned_sam_mask
 from segment_anything import sam_model_registry, SamPredictor
 
 from render import feature_to_rgb, visualize_obj
@@ -33,10 +33,12 @@ def render_set(model_path, name, iteration, views, gaussians, pipeline, backgrou
     gts_path = os.path.join(model_path, name, "ours_{}_text".format(iteration), "gt")
     colormask_path = os.path.join(model_path, name, "ours_{}_text".format(iteration), "objects_feature16")
     pred_obj_path = os.path.join(model_path, name, "ours_{}_text".format(iteration), "test_mask")
+    sam_path = os.path.join(model_path, name, "ours_{}_text".format(iteration), "sam_mask")
     makedirs(render_path, exist_ok=True)
     makedirs(gts_path, exist_ok=True)
     makedirs(colormask_path, exist_ok=True)
     makedirs(pred_obj_path, exist_ok=True)
+    makedirs(sam_path, exist_ok=True)
 
     # Use Grounded-SAM on the first frame
     results0 = render(views[0], gaussians, pipeline, background)
@@ -53,9 +55,15 @@ def render_set(model_path, name, iteration, views, gaussians, pipeline, backgrou
     for idx, view in enumerate(tqdm(views, desc="Rendering progress")):
         pred_obj_img_path = os.path.join(pred_obj_path,str(idx))
         makedirs(pred_obj_img_path, exist_ok=True)
+        sam_img_path = os.path.join(sam_path,str(idx))
+        makedirs(sam_img_path, exist_ok=True)
 
         results = render(view, gaussians, pipeline, background)
         rendering = results["render"]
+        
+        image = (rendering.permute(1,2,0) * 255).cpu().numpy().astype('uint8')
+        sam_mask = grouned_sam_mask(groundingdino_model, sam_predictor, TEXT_PROMPT, image)
+        
         rendering_obj = results["render_object"]
         logits = classifier(rendering_obj)
 
@@ -74,6 +82,7 @@ def render_set(model_path, name, iteration, views, gaussians, pipeline, backgrou
         rgb_mask = feature_to_rgb(rendering_obj)
         Image.fromarray(rgb_mask).save(os.path.join(colormask_path, '{0:05d}'.format(idx) + ".png"))
         Image.fromarray(pred_obj_mask).save(os.path.join(pred_obj_img_path, TEXT_PROMPT + ".png"))
+        sam_mask.save(os.path.join(sam_img_path, TEXT_PROMPT+'.png'))
         print(os.path.join(pred_obj_img_path, TEXT_PROMPT + ".png"))
         gt = view.original_image[0:3, :, :]
         torchvision.utils.save_image(rendering, os.path.join(render_path, '{0:05d}'.format(idx) + ".png"))
@@ -117,7 +126,7 @@ def render_sets(dataset : ModelParams, iteration : int, pipeline : PipelineParam
         elif 'ramen' in dataset.model_path:
             positive_input = "chopsticks;egg;pork belly;yellow bowl"
         elif 'teatime' in dataset.model_path:
-            positive_input = "apple;bag of cookies;coffee mug;cookies on a plate;paper napkin;sheep;bear;tea in a glass"
+            positive_input = "apple;coffee mug;cookies on a plate;sheep;bear;tea in a glass"
         else:
             raise NotImplementedError   # You can provide your text prompt here
         

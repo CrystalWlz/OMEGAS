@@ -60,6 +60,7 @@ class ModelParams(ParamGroup):
         self._object_path = "object_mask"
         self.num_classes = 256
         self._depth_path = "depth"
+        self.render_items = ['RGB', 'Alpha', 'Normal', 'Depth', 'Edge', 'Curvature','Object']
         super().__init__(parser, "Loading Parameters", sentinel)
 
     def extract(self, args):
@@ -71,13 +72,14 @@ class PipelineParams(ParamGroup):
     def __init__(self, parser):
         self.convert_SHs_python = False
         self.compute_cov3D_python = False
+        self.depth_ratio = 0.0
         self.debug = False
-        self.render_depth = False
+        # self.render_depth = False
         super().__init__(parser, "Pipeline Parameters")
 
 class OptimizationParams(ParamGroup):
     def __init__(self, parser):
-        self.iterations = 7_000
+        self.iterations = 15_000
         self.position_lr_init = 0.00016
         self.position_lr_final = 0.0000016
         self.position_lr_delay_mult = 0.01
@@ -88,13 +90,17 @@ class OptimizationParams(ParamGroup):
         self.rotation_lr = 0.001
         self.percent_dense = 0.01
         self.lambda_dssim = 0.2
+        self.lambda_dist = 0.0
+        self.lambda_normal = 0.05
+        self.opacity_cull = 0.05 # 0.005
+        
         self.densification_interval = 100
         self.opacity_reset_interval = 3000
         self.densify_from_iter = 500
         self.densify_until_iter = 15_000
         self.densify_grad_threshold = 0.0002
         self.random_background = False
-        self.obj_loss = True
+        # self.obj_loss = True
         self.depth_loss = False
         self.reg3d_interval = 2
         self.reg3d_k = 5

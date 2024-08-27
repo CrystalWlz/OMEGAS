@@ -17,17 +17,17 @@ import numpy as np
 import json
 from pathlib import Path
 from plyfile import PlyData, PlyElement
-from gaussian_splatting.scene.colmap_loader import read_extrinsics_text, read_intrinsics_text, qvec2rotmat, \
+from gaussian_splatting.scene_2D.colmap_loader import read_extrinsics_text, read_intrinsics_text, qvec2rotmat, \
     read_extrinsics_binary, read_intrinsics_binary, read_points3D_binary, read_points3D_text
 from gaussian_splatting.utils.graphics_utils import getWorld2View2, focal2fov, fov2focal
 from gaussian_splatting.utils.sh_utils import SH2RGB
-from gaussian_splatting.scene.gaussian_model import BasicPointCloud
+from gaussian_splatting.scene_2D.gaussian_model import BasicPointCloud
 
-# from scene.colmap_loader import read_extrinsics_text, read_intrinsics_text, qvec2rotmat, \
+# from scene_2D.colmap_loader import read_extrinsics_text, read_intrinsics_text, qvec2rotmat, \
 #     read_extrinsics_binary, read_intrinsics_binary, read_points3D_binary, read_points3D_text
 # from utils.graphics_utils import getWorld2View2, focal2fov, fov2focal
 # from utils.sh_utils import SH2RGB
-# from scene.gaussian_model import BasicPointCloud
+# from scene_2D.gaussian_model import BasicPointCloud
 
 class CameraInfo(NamedTuple):
     uid: int
@@ -36,12 +36,12 @@ class CameraInfo(NamedTuple):
     FovY: np.array
     FovX: np.array
     image: np.array
+    alpha_mask: np.array
     image_path: str
     image_name: str
     width: int
     height: int
     objects: np.array
-    depth: np.array
 
 class SceneInfo(NamedTuple):
     point_cloud: BasicPointCloud
@@ -73,7 +73,7 @@ def getNerfppNorm(cam_info):
 
     return {"translate": translate, "radius": radius}
 
-def readColmapCameras(cam_extrinsics, cam_intrinsics, images_folder, objects_folder=None, depth_folder=None):
+def readColmapCameras(cam_extrinsics, cam_intrinsics, images_folder, objects_folder=None, alpha_mask_folder=None):
     cam_infos = []
     for idx, key in enumerate(cam_extrinsics):
         sys.stdout.write('\r')
@@ -105,13 +105,13 @@ def readColmapCameras(cam_extrinsics, cam_intrinsics, images_folder, objects_fol
         image_path = os.path.join(images_folder, os.path.basename(extr.name))
         image_name = os.path.basename(image_path).split(".")[0]
         image = Image.open(image_path)
+        
         object_path = os.path.join(objects_folder, image_name + '.png')
         objects = Image.open(object_path) if os.path.exists(object_path) else None
-        depth_path = os.path.join(depth_folder, image_name + '.png')
-        depth = Image.open(depth_path) if os.path.exists(depth_path) else None
+        alpha_mask_path = os.path.join(alpha_mask_folder, image_name + '.png')
+        alpha_mask = Image.open(alpha_mask_path) if os.path.exists(alpha_mask_path) else None
 
-        cam_info = CameraInfo(uid=uid, R=R, T=T, FovY=FovY, FovX=FovX, image=image,
-                              image_path=image_path, image_name=image_name, width=width, height=height, objects=objects, depth=depth)
+        cam_info = CameraInfo(uid=uid, R=R, T=T, FovY=FovY, FovX=FovX, image=image, alpha_mask=alpha_mask, image_path=image_path, image_name=image_name, width=width, height=height, objects=objects)
         cam_infos.append(cam_info)
     sys.stdout.write('\n')
     return cam_infos
@@ -141,7 +141,7 @@ def storePly(path, xyz, rgb):
     ply_data = PlyData([vertex_element])
     ply_data.write(path)
 
-def readColmapSceneInfo(path, images, eval, object_path, depth_path, llffhold=8, n_views=100, random_init = False, train_split=False):
+def readColmapSceneInfo(path, images, eval, object_path, alpha_mask_path, llffhold=8, n_views=100, random_init = False, train_split=False):
     try:
         cameras_extrinsic_file = os.path.join(path, "sparse/0", "images.bin")
         cameras_intrinsic_file = os.path.join(path, "sparse/0", "cameras.bin")
@@ -157,9 +157,9 @@ def readColmapSceneInfo(path, images, eval, object_path, depth_path, llffhold=8,
     images_folder=os.path.join(path, reading_dir)
     object_dir = 'object_mask' if object_path == None else object_path
     objects_folder=os.path.join(path, object_dir)
-    depth_dir = 'depth' if depth_path == None else depth_path
-    depth_folder=os.path.join(path, depth_dir)
-    cam_infos_unsorted = readColmapCameras(cam_extrinsics=cam_extrinsics, cam_intrinsics=cam_intrinsics, images_folder=images_folder, objects_folder=objects_folder,depth_folder=depth_folder)
+    alpha_mask_dir = 'alpha_mask' if alpha_mask_path == None else alpha_mask_path
+    alpha_mask_folder=os.path.join(path, alpha_mask_dir)
+    cam_infos_unsorted = readColmapCameras(cam_extrinsics=cam_extrinsics, cam_intrinsics=cam_intrinsics, images_folder=images_folder, objects_folder=objects_folder,alpha_mask_folder=alpha_mask_folder)
     cam_infos = sorted(cam_infos_unsorted.copy(), key = lambda x : x.image_name)
 
     if eval:
@@ -286,6 +286,112 @@ def readCamerasFromTransforms(path, transformsfile, white_background, extension=
             
     return cam_infos
 
+def readCamerasFromJSON(path, transformsfile, white_background=False, extension=".jpg", objects_folder='object_mask', alpha_mask_folder='alpha_mask',  remove_indices=[]):
+    cam_infos = []
+    image_dir = os.path.join(path, 'images')
+    extension = '.' + os.listdir(image_dir)[0].split('.')[-1]
+    if extension not in ['.jpg', '.png', '.JPG', '.PNG']:
+        print(f"Warning: image extension {extension} not supported.")
+    else:
+        print(f"Found image extension {extension}")
+    
+    with open(os.path.join(path, transformsfile)) as json_file:
+        unsorted_camera_transforms = json.load(json_file)
+    
+    # Remove indices
+    if len(remove_indices) > 0:
+        print("Removing cameras with indices:", remove_indices, sep="\n")
+        new_unsorted_camera_transforms = []
+        for i in range(len(unsorted_camera_transforms)):
+            if i not in remove_indices:
+                new_unsorted_camera_transforms.append(unsorted_camera_transforms[i])
+        unsorted_camera_transforms = new_unsorted_camera_transforms
+    
+    camera_transforms = sorted(unsorted_camera_transforms.copy(), key = lambda x : x['img_name'])
+    
+    for cam_idx in range(len(camera_transforms)):
+        camera_transform = camera_transforms[cam_idx]
+        # Extrinsics
+        rot = np.array(camera_transform['rotation'])
+        pos = np.array(camera_transform['position'])
+        W2C = np.zeros((4,4))
+        W2C[:3, :3] = rot
+        W2C[:3, 3] = pos
+        W2C[3,3] = 1
+        
+        Rt = np.linalg.inv(W2C)
+        T = Rt[:3, 3]
+        R = Rt[:3, :3].transpose()
+        
+        # Intrinsics
+        width = camera_transform['width']
+        height = camera_transform['height']
+        fy = camera_transform['fy']
+        fx = camera_transform['fx']
+        FovY = focal2fov(fy, height)
+        FovX = focal2fov(fx, width)
+        
+        # GT data
+        id = camera_transform['id']
+        name = camera_transform['img_name']
+        image_path = os.path.join(image_dir, name + extension)
+        
+        image = Image.open(image_path)
+        if white_background:
+            im_data = np.array(image.convert("RGBA"))
+            bg = np.array([1,1,1])
+            norm_data = im_data / 255.0
+            arr = norm_data[:,:,:3] * norm_data[:, :, 3:4] + bg * (1 - norm_data[:, :, 3:4])
+            image = Image.fromarray(np.array(arr*255.0, dtype=np.byte), "RGB")
+            
+        object_path = os.path.join(objects_folder, name + extension)
+        objects = Image.open(object_path) if os.path.exists(object_path) else None
+        alpha_mask_path = os.path.join(alpha_mask_folder, name + extension)
+        alpha_mask = Image.open(alpha_mask_path) if os.path.exists(alpha_mask_path) else None
+        
+        cam_info = CameraInfo(uid=id, R=R, T=T, FovY=FovY, FovX=FovX, image=image, alpha_mask=alpha_mask, 
+                              image_path=image_path, image_name=name, width=width, height=height, objects=objects)
+            
+        cam_infos.append(cam_info)
+            
+    return cam_infos
+
+def readCamerasInfo(path, white_background, eval, extension=".jpg"):
+    print("Reading Training Transforms")
+    train_cam_infos = readCamerasFromJSON(path, "cameras.json", white_background, extension)
+    print("Reading Test Transforms")
+    
+    test_cam_infos = []
+
+    nerf_normalization = getNerfppNorm(train_cam_infos)
+
+    ply_path = os.path.join(path, "points3D.ply")
+    if not os.path.exists(ply_path):
+        # Since this data set has no colmap data, we start with random points
+        num_pts = 100_000
+        print(f"Generating random point cloud ({num_pts})...")
+        
+        # We create random points inside the bounds of the synthetic Blender scenes
+        xyz = np.random.random((num_pts, 3)) * 2.6 - 1.3
+        shs = np.random.random((num_pts, 3)) / 255.0
+        pcd = BasicPointCloud(points=xyz, colors=SH2RGB(shs), normals=np.zeros((num_pts, 3)))
+
+        storePly(ply_path, xyz, SH2RGB(shs) * 255)
+    else:
+        print("Found pcd")
+        pcd = fetchPly(ply_path)
+
+
+    scene_info = SceneInfo(point_cloud=pcd,
+                           train_cameras=train_cam_infos,
+                           test_cameras=test_cam_infos,
+                           nerf_normalization=nerf_normalization,
+                           ply_path=ply_path)
+    return scene_info
+    
+        
+        
+    
 def readNerfSyntheticInfo(path, white_background, eval, extension=".png"):
     print("Reading Training Transforms")
     train_cam_infos = readCamerasFromTransforms(path, "transforms_train.json", white_background, extension)
@@ -298,7 +404,7 @@ def readNerfSyntheticInfo(path, white_background, eval, extension=".png"):
 
     nerf_normalization = getNerfppNorm(train_cam_infos)
 
-    ply_path = os.path.join(path, "points3d.ply")
+    ply_path = os.path.join(path, "points3D.ply")
     if not os.path.exists(ply_path):
         # Since this data set has no colmap data, we start with random points
         num_pts = 100_000
@@ -324,5 +430,6 @@ def readNerfSyntheticInfo(path, white_background, eval, extension=".png"):
 
 sceneLoadTypeCallbacks = {
     "Colmap": readColmapSceneInfo,
-    "Blender" : readNerfSyntheticInfo
+    "Blender" : readNerfSyntheticInfo,
+    "Cameras" : readCamerasInfo
 }

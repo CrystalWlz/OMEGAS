@@ -18,7 +18,6 @@ if [ ! -d "$dataset_folder" ]; then
 fi
 
 
-
 # 1. DEVA anything mask
 cd Tracking-Anything-with-DEVA/
 
