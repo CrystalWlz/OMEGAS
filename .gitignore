@@ -142,3 +142,4 @@ learnableearthparser/fast_sampler/_sampler.c
 result/
 
 *.cmake
+gaussian_splatting/submodules/diff-surfel-rasterization/third_party/
