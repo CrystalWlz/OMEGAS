@@ -90,8 +90,8 @@ conda install pytorch3d::pytorch3d
 
 Then you can try to install the required packages manually by running the following commands:
 ```shell
-conda create --name gss -y python=3.9
-conda activate gss
+conda create --name omg -y python=3.9
+conda activate omg
 conda install pytorch==2.0.1 torchvision==0.15.2 torchaudio==2.0.2 pytorch-cuda=11.7 -c pytorch -c nvidia
 conda install -c fvcore -c iopath -c conda-forge fvcore iopath
 conda install pytorch3d -c pytorch3d==0.7.5
@@ -111,7 +111,7 @@ conda install pytorch3d::pytorch3d
 Run the following commands inside the OMEGAS directory to install the additional Python submodules required for Gaussian Splatting:
 
 ```shell
-cd gaussian_splatting/submodules/diff-gaussian-rasterization/
+cd gaussian_splatting/submodules/diff-surfel-rasterization/
 pip install -e .
 cd ../diff-surfel-rasterization/
 pip install .
@@ -139,52 +139,11 @@ python -m pip install -e GroundingDINO
 cd ..
 ```
 
-### 5. Install the SuGaR
-
-To install the required Python packages and activate the environment, run the following commands:
-
-```shell
-cd SuGaR
-conda env create -f environment.yml
-conda activate sugar
-```
-
-<details>
-<summary><span style="font-weight: bold;">If this command fails to create a working environment</span></summary>
-
-Then you can try to install the required packages manually by running the following commands:
-```shell
-conda create --name sugar -y python=3.9
-conda activate sugar
-conda install pytorch==2.0.1 torchvision==0.15.2 torchaudio==2.0.2 pytorch-cuda=11.7 -c pytorch -c nvidia
-conda install -c fvcore -c iopath -c conda-forge fvcore iopath
-conda install pytorch3d==0.7.4 -c pytorch3d
-conda install -c plotly plotly
-conda install -c conda-forge rich
-conda install -c conda-forge plyfile==0.8.1
-conda install -c conda-forge jupyterlab
-conda install -c conda-forge nodejs
-conda install -c conda-forge ipywidgets
-pip install open3d
-pip install --upgrade PyMCubes
-```
-</details>
-
-Run the following commands inside the sugar directory to install the additional Python submodules required for Gaussian Splatting:
-
-```shell
-cd gaussian_splatting/submodules/diff-gaussian-rasterization/
-pip install -e .
-cd ../simple-knn/
-pip install -e .
-cd ../../../
-```
-Please refer to the <a href="https://github.com/graphdeco-inria/gaussian-splatting">3D Gaussian Splatting repository</a> for more details.
 
 ## Quick Start
 
 ```shell
-conda activate gss
+conda activate omg
 
 bash script/prepare_pseudo_label.sh bear 1
 
@@ -204,12 +163,7 @@ python extract_object.py -m output/truck_2D --config_file configs/gaussian_datas
 
 # python render_obj.py -m output/truck_2d/object_104/ --config_file configs/gaussian_dataset/truck.json
 
-copy classifier.pth
-
 python dream_gaussian_2D.py --config configs/dream/dream_truck.yaml
-
-copy points3D.ply
-copy images
 
 python run_gaussian_2D.py -s output/truck_2D/object_104/refined -m output/truck_2D/object_104/refined --no_obj_loss --depth_ratio 1.0 --lambda_dist 1000
 
@@ -218,22 +172,7 @@ python render_simple.py -m output/truck_2D/object_104/refined
 python mesh_2D.py -s output/truck_2D/object_104/refined -m output/truck_2D/object_104/refined --iteration 30000 --depth_ratio 1.0 --voxel_size 0.004 --sdf_trunc 0.016 --depth_trunc 3.0
 ``````
 
-Start by optimizing a vanilla Gaussian Splatting model for 7k iterations by running the script `gaussian_splatting/train.py`, as shown below. Please refer to the original <a href="https://github.com/graphdeco-inria/gaussian-splatting">3D Gaussian Splatting repository</a> for more details. This optimization should be very fast, and last only a few minutes.
 
-```shell
-cd SuGaR
-conda activate sugar
-python gaussian_splatting/train.py -s <path to COLMAP or NeRF Synthetic dataset> --iterations 7000 -m <path to the desired output directory>
-```
-
-Then, run the script `train.py` in the root directory to optimize a SuGaR model.
-
-```shell
-python train.py -s <path to COLMAP or NeRF Synthetic dataset> -c <path to the Gaussian Splatting checkpoint> -r <"density" or "sdf">
-python train.py -s ~/Code/OMEGS/output/truck_test_cos/object_104/train/ours_7000/ -c ~/Code/OMEGS/output/truck_test_cos/object_104/ -r density --gpu 2
-python train.py -s ~/Code/OMEGS/output/figurines/object_67/ -c ~/Code/OMEGS/output/figurines/object_67/ -r density --gpu 3
-
-```
 
 
 
