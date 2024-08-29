@@ -57,8 +57,6 @@ The software requirements are the following:
 - CUDA toolkit 11.7 for PyTorch extensions
 - C++ Compiler and CUDA SDK must be compatible
 
-Please refer to the original <a href="https://github.com/graphdeco-inria/gaussian-splatting">3D Gaussian Splatting repository</a> for more details about requirements.
-
 ### 1. Clone the repository
 
 Start by cloning this repository:
